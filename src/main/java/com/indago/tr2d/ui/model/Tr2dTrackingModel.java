@@ -20,6 +20,7 @@ import com.indago.data.segmentation.LabelingSegment;
 import com.indago.fg.Assignment;
 import com.indago.fg.AssignmentMapper;
 import com.indago.fg.FactorGraphFactory;
+import com.indago.fg.MappedDiverseFactorGraph;
 import com.indago.fg.MappedFactorGraph;
 import com.indago.fg.UnaryCostConstraintGraph;
 import com.indago.fg.Variable;
@@ -86,6 +87,8 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 	private double maxDivisionSearchRadius = 50;
 	private int maxMovementsToAddPerHypothesis = 4;
 	private int maxDivisionsToAddPerHypothesis = 8;
+	
+	private int numberDiverseSolutions = 2;
 
 	private final List< CostFactory< ? > > costFactories = new ArrayList<>();
 	private final CostFactory< LabelingSegment > segmentCosts;
@@ -97,16 +100,21 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 	private Tr2dTrackingProblem tr2dTraProblem;
 	private final LabelingTimeLapse labelingFrames;
 	private RandomAccessibleInterval< IntType > imgSolution = null;
+	private List< RandomAccessibleInterval< IntType > > imgSolutionList = new ArrayList<>();
 
 	private MappedFactorGraph mfg;
+	private MappedDiverseFactorGraph dmfg;
 	private Assignment< Variable > fgSolution;
 	private Assignment< IndicatorNode > pgSolution;
+	private List< Assignment< IndicatorNode > > pgSolutionList = new ArrayList<>();
 
 	private BdvHandlePanel bdvHandlePanel;
 	private final List< RandomAccessibleInterval< IntType > > imgs;
 	private final List< BdvSource > bdvSources = new ArrayList< >();
 	private final List< BdvOverlay > overlays = new ArrayList< >();
 	private final List< BdvSource > bdvOverlaySources = new ArrayList< >();
+	
+	private final List< BdvSource > diverseSolutionBdvSources = new ArrayList< >();
 
 	private final List< SolutionChangedListener > solChangedListeners;
 	private final List< ModelInfeasibleListener > modelInfeasibleListeners;
@@ -192,13 +200,14 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 	/**
 	 * Prepares the tracking model (Step1: builds pg and stores intermediate
 	 * data in
-	 * project folder).
+	 * project folder).0x00FF00
 	 */
 	private boolean preparePG() {
 		if ( processSegmentationInputs( false ) ) {
 			buildTrackingProblem();
 			saveTrackingProblem();
 			mfg = null;
+			dmfg = null;
 			return true;
 		} else {
 			return false;
@@ -258,7 +267,13 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 			fireProgressEvent();
     		solveFactorGraph();
 			fireProgressEvent();
-			imgSolution = SolutionVisulizer.drawSolutionSegmentImages( this, pgSolution );
+//			imgSolution = SolutionVisulizer.drawSolutionSegmentImages( this, pgSolution );
+			if ( numberDiverseSolutions > 1 ) {
+				imgSolutionList.clear();
+				for ( Assignment< IndicatorNode > divSolution : pgSolutionList ) {
+					imgSolutionList.add( SolutionVisulizer.drawSolutionSegmentImages( this, divSolution) );
+				}
+			}
     		saveSolution();
 			fireSolutionChangedEvent();
 			fireProgressEvent();
@@ -291,11 +306,30 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 
 				final int bdvTime = bdvHandlePanel.getViewerPanel().getState().getCurrentTimepoint();
 				bdvRemoveAll();
+				diverseSolutionBdvSources.clear();
+				
 				bdvAdd( getTr2dModel().getRawData(), "RAW" );
 				bdvHandlePanel.getViewerPanel().setTimepoint( bdvTime );
-
-				if ( imgSolution != null )
-					bdvAdd( imgSolution, "solution", 0, 5, new ARGBType( 0x00FF00 ), true );
+				
+				if ( numberDiverseSolutions > 1 ) {
+					if ( imgSolutionList != null ) {
+						int i = 0;
+						for ( RandomAccessibleInterval< IntType > imgSol : imgSolutionList ) {
+							if ( i == 0 )
+								bdvAdd( imgSol, "solution 1", 0, 5, new ARGBType( 0x00FF00 ), true );
+							else
+								bdvAdd( imgSol, "solution " + ( i + 1 ), 0, 5, new ARGBType( 0x00FF00 ), false );
+							i++;
+						}
+						diverseSolutionBdvSources.addAll( bdvGetSources().subList( 1, bdvGetSources().size() ) );
+					}
+				}
+				else {
+					if ( imgSolution != null ) {
+						bdvAdd( imgSolution, "solution", 0, 5, new ARGBType( 0x00FF00 ), true );
+						diverseSolutionBdvSources.addAll( bdvGetSources().subList( 1, bdvGetSources().size() ) );
+					}
+				}
 			}
 
 		};
@@ -404,29 +438,61 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 		tictoc.tic( "Constructing FactorGraph for created Tr2dTrackingProblem..." );
 		mfg = FactorGraphFactory.createFactorGraph( tr2dTraProblem, progressListeners );
 		tictoc.toc( "done!" );
+
+		if ( numberDiverseSolutions > 1 ) {
+			tictoc.tic( "Duplicating FactorGraph for created Tr2dTrackingProblem..." );
+			dmfg = FactorGraphFactory.extendFactorGraphForDiversity( mfg, numberDiverseSolutions, progressListeners );
+			tictoc.toc( "done!" );
+		}
 	}
 
 	/**
 	 *
 	 */
 	private void solveFactorGraph() {
-		final UnaryCostConstraintGraph fg = mfg.getFg();
-		final AssignmentMapper< Variable, IndicatorNode > assMapper = mfg.getAssmntMapper();
-//		final Map< IndicatorNode, Variable > varMapper = mfg.getVarmap();
+		if ( numberDiverseSolutions > 1 ) {
+			final UnaryCostConstraintGraph fg = dmfg.getFg();
+			final List< AssignmentMapper< Variable, IndicatorNode > > assMapperList = dmfg.getListOfAssignmentMaps();
 
-		fgSolution = null;
-		try {
-			SolveGurobi.GRB_PRESOLVE = 0;
-			solver = new SolveGurobi();
-			fgSolution = solver.solve( fg, new DefaultLoggingGurobiCallback( Tr2dLog.gurobilog ) );
-			pgSolution = assMapper.map( fgSolution );
-		} catch ( final GRBException e ) {
-			e.printStackTrace();
-		} catch ( final IllegalStateException ise ) {
 			fgSolution = null;
-			pgSolution = null;
-			Tr2dLog.log.error( "Model is now infeasible and needs to be retracked!" );
-			fireModelInfeasibleEvent();
+			pgSolutionList.clear();
+			try {
+				SolveGurobi.GRB_PRESOLVE = 0;
+				solver = new SolveGurobi();
+				fgSolution = solver.solve( fg, new DefaultLoggingGurobiCallback( Tr2dLog.gurobilog ) );
+				for ( final AssignmentMapper< Variable, IndicatorNode > mapper : assMapperList ) {
+					final Assignment< IndicatorNode > partSol = mapper.map(fgSolution);
+					pgSolutionList.add( partSol );
+				}
+				pgSolution = pgSolutionList.get(0);
+			} catch ( final GRBException e ) {
+				e.printStackTrace();
+			} catch ( final IllegalStateException ise ) {
+				fgSolution = null;
+				pgSolution = null;
+				Tr2dLog.log.error( "Model is now infeasible and needs to be retracked!" );
+				fireModelInfeasibleEvent();
+			}
+		}
+		else {
+			final UnaryCostConstraintGraph fg = mfg.getFg();
+			final AssignmentMapper< Variable, IndicatorNode > assMapper = mfg.getAssmntMapper();
+//			final Map< IndicatorNode, Variable > varMapper = mfg.getVarmap();
+
+			fgSolution = null;
+			try {
+				SolveGurobi.GRB_PRESOLVE = 0;
+				solver = new SolveGurobi();
+				fgSolution = solver.solve( fg, new DefaultLoggingGurobiCallback( Tr2dLog.gurobilog ) );
+				pgSolution = assMapper.map( fgSolution );
+			} catch ( final GRBException e ) {
+				e.printStackTrace();
+			} catch ( final IllegalStateException ise ) {
+				fgSolution = null;
+				pgSolution = null;
+				Tr2dLog.log.error( "Model is now infeasible and needs to be retracked!" );
+				fireModelInfeasibleEvent();
+			}
 		}
 	}
 
@@ -738,6 +804,25 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 	 */
 	public void setMaxDivisionsToAddPerHypothesis( final int maxDivisionsToAddPerHypothesis ) {
 		this.maxDivisionsToAddPerHypothesis = maxDivisionsToAddPerHypothesis;
+	}
+
+	/**
+	 * @return the numberDiverseSolutions
+	 */
+	public int getNumberDiverseSolutions() {
+		return numberDiverseSolutions;
+	}
+
+	/**
+	 * @param numberDiverseSolutions
+	 *            the number of diverse solutions to compute
+	 */
+	public void setNumberDiverseSolutions( final int numberDiverseSolutions ) {
+		this.numberDiverseSolutions = numberDiverseSolutions;
+	}
+
+	public List<BdvSource> getDiverseSolutionBdvSources() {
+		return diverseSolutionBdvSources;
 	}
 
 	/**
