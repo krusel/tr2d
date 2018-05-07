@@ -44,6 +44,7 @@ import com.indago.tr2d.pg.Tr2dTrackingProblem;
 import com.indago.tr2d.ui.listener.ModelInfeasibleListener;
 import com.indago.tr2d.ui.listener.SolutionChangedListener;
 import com.indago.tr2d.ui.util.SolutionVisulizer;
+import com.indago.tr2d.ui.view.bdv.overlays.Tr2dTrackingOverlay;
 import com.indago.ui.bdv.BdvWithOverlaysOwner;
 import com.indago.util.TicToc;
 import com.univocity.parsers.csv.CsvParser;
@@ -100,21 +101,22 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 	private Tr2dTrackingProblem tr2dTraProblem;
 	private final LabelingTimeLapse labelingFrames;
 	private RandomAccessibleInterval< IntType > imgSolution = null;
-	private List< RandomAccessibleInterval< IntType > > imgSolutionList = new ArrayList<>();
 
 	private MappedFactorGraph mfg;
-	private MappedDiverseFactorGraph dmfg;
 	private Assignment< Variable > fgSolution;
 	private Assignment< IndicatorNode > pgSolution;
-	private List< Assignment< IndicatorNode > > pgSolutionList = new ArrayList<>();
 
 	private BdvHandlePanel bdvHandlePanel;
 	private final List< RandomAccessibleInterval< IntType > > imgs;
 	private final List< BdvSource > bdvSources = new ArrayList< >();
 	private final List< BdvOverlay > overlays = new ArrayList< >();
 	private final List< BdvSource > bdvOverlaySources = new ArrayList< >();
-	
+
+	private MappedDiverseFactorGraph dmfg;
+	private List< RandomAccessibleInterval< IntType > > imgSolutionList = new ArrayList<>();
 	private final List< BdvSource > diverseSolutionBdvSources = new ArrayList< >();
+	private Tr2dTrackingOverlay trackingOverlay = null;
+	private List< Assignment< IndicatorNode > > pgSolutionList = new ArrayList<>();
 
 	private final List< SolutionChangedListener > solChangedListeners;
 	private final List< ModelInfeasibleListener > modelInfeasibleListeners;
@@ -261,24 +263,28 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 			prepareFG();
 			doSolving = true;
 		}
+		
+		System.out.println(" ");
+		System.out.println("finished preparation");
 
 		if (doSolving) {
 			fireNextProgressPhaseEvent( "Solving tracking with GUROBI...", 3 );
 			fireProgressEvent();
     		solveFactorGraph();
 			fireProgressEvent();
-//			imgSolution = SolutionVisulizer.drawSolutionSegmentImages( this, pgSolution );
 			if ( numberDiverseSolutions > 1 ) {
 				imgSolutionList.clear();
 				for ( Assignment< IndicatorNode > divSolution : pgSolutionList ) {
 					imgSolutionList.add( SolutionVisulizer.drawSolutionSegmentImages( this, divSolution) );
 				}
+			} else {
+				imgSolution = SolutionVisulizer.drawSolutionSegmentImages( this, pgSolution );
 			}
     		saveSolution();
 			fireSolutionChangedEvent();
 			fireProgressEvent();
 		}
-
+		
 		fireProgressCompletedEvent();
 	}
 
@@ -303,7 +309,7 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 			@Override
 			public void run() {
 				Tr2dTrackingModel.this.run( forceResolve, forceRebuildPG );
-
+				
 				final int bdvTime = bdvHandlePanel.getViewerPanel().getState().getCurrentTimepoint();
 				bdvRemoveAll();
 				diverseSolutionBdvSources.clear();
@@ -316,18 +322,30 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 						int i = 0;
 						for ( RandomAccessibleInterval< IntType > imgSol : imgSolutionList ) {
 							if ( i == 0 )
-								bdvAdd( imgSol, "solution 1", 0, 5, new ARGBType( 0x00FF00 ), true );
+								bdvAdd( imgSol, "solution 1", 0, 5, new ARGBType( 0x00FFFF ), true );
 							else
-								bdvAdd( imgSol, "solution " + ( i + 1 ), 0, 5, new ARGBType( 0x00FF00 ), false );
+								bdvAdd( imgSol, "solution " + ( i + 1 ), 0, 5, new ARGBType( 0xFFFF00 ), false );
 							i++;
 						}
 						diverseSolutionBdvSources.addAll( bdvGetSources().subList( 1, bdvGetSources().size() ) );
+						
+						if ( trackingOverlay == null ) {
+							trackingOverlay = new Tr2dTrackingOverlay( Tr2dTrackingModel.this );
+							bdvAdd( trackingOverlay, "overlay tracking", true );
+						}
+						trackingOverlay.setActiveSolution(0);
 					}
 				}
 				else {
 					if ( imgSolution != null ) {
 						bdvAdd( imgSolution, "solution", 0, 5, new ARGBType( 0x00FF00 ), true );
 						diverseSolutionBdvSources.addAll( bdvGetSources().subList( 1, bdvGetSources().size() ) );
+						
+						if ( trackingOverlay == null ) {
+							trackingOverlay = new Tr2dTrackingOverlay( Tr2dTrackingModel.this );
+							bdvAdd( trackingOverlay, "overlay tracking", true );
+						}
+						trackingOverlay.setActiveSolution(0);
 					}
 				}
 			}
@@ -455,6 +473,7 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 			final List< AssignmentMapper< Variable, IndicatorNode > > assMapperList = dmfg.getListOfAssignmentMaps();
 
 			fgSolution = null;
+//			pgSolution = null;
 			pgSolutionList.clear();
 			try {
 				SolveGurobi.GRB_PRESOLVE = 0;
@@ -480,11 +499,14 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 //			final Map< IndicatorNode, Variable > varMapper = mfg.getVarmap();
 
 			fgSolution = null;
+			pgSolutionList.clear();
+			
 			try {
 				SolveGurobi.GRB_PRESOLVE = 0;
 				solver = new SolveGurobi();
 				fgSolution = solver.solve( fg, new DefaultLoggingGurobiCallback( Tr2dLog.gurobilog ) );
 				pgSolution = assMapper.map( fgSolution );
+				pgSolutionList.add( pgSolution );
 			} catch ( final GRBException e ) {
 				e.printStackTrace();
 			} catch ( final IllegalStateException ise ) {
@@ -572,7 +594,17 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 	 * @return
 	 */
 	public Assignment< IndicatorNode > getSolution() {
-		return this.pgSolution;
+		return getSolution(0);
+	}
+
+	/**
+	 * @return
+	 */
+	public Assignment< IndicatorNode > getSolution(int i) {
+		if ( i < this.pgSolutionList.size() && i >= 0 )
+			return this.pgSolutionList.get(i);
+		else
+			return this.pgSolution;
 	}
 
 	/**
@@ -823,6 +855,10 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 
 	public List<BdvSource> getDiverseSolutionBdvSources() {
 		return diverseSolutionBdvSources;
+	}
+
+	public Tr2dTrackingOverlay getTr2dTrackingOverlay() {
+		return trackingOverlay;
 	}
 
 	/**

@@ -27,6 +27,7 @@ public class Tr2dTrackingOverlay extends BdvOverlay {
 
 	private final Tr2dTrackingModel trackingModel;
 	private final int time;
+	private int activeSolution;
 
 	/**
 	 * @param model
@@ -34,6 +35,7 @@ public class Tr2dTrackingOverlay extends BdvOverlay {
 	public Tr2dTrackingOverlay( final Tr2dTrackingModel model ) {
 		this.trackingModel = model;
 		this.time = -1;
+		this.activeSolution = 0;
 	}
 
 	/**
@@ -42,6 +44,7 @@ public class Tr2dTrackingOverlay extends BdvOverlay {
 	public Tr2dTrackingOverlay( final Tr2dTrackingModel model, final int t ) {
 		this.trackingModel = model;
 		this.time = t;
+		this.activeSolution = 0;
 	}
 
 	/**
@@ -49,7 +52,7 @@ public class Tr2dTrackingOverlay extends BdvOverlay {
 	 */
 	@Override
 	protected void draw( final Graphics2D g ) {
-		final Assignment< IndicatorNode > pgSolution = trackingModel.getSolution();
+		final Assignment< IndicatorNode > pgSolution = trackingModel.getSolution(activeSolution);
 
 		if ( pgSolution != null ) {
 			final AffineTransform2D trans = new AffineTransform2D();
@@ -68,7 +71,7 @@ public class Tr2dTrackingOverlay extends BdvOverlay {
 	 */
 	private void drawCOMTails( final Graphics2D g, final int cur_t, final int length ) {
 		final Tr2dTrackingProblem tr2dPG = trackingModel.getTrackingProblem();
-		final Assignment< IndicatorNode > pgSolution = trackingModel.getSolution();
+		final Assignment< IndicatorNode > pgSolution = trackingModel.getSolution(activeSolution);
 
 		final AffineTransform2D trans = new AffineTransform2D();
 		getCurrentTransform2D( trans );
@@ -112,7 +115,7 @@ public class Tr2dTrackingOverlay extends BdvOverlay {
 		final Graphics2D g2 = g;
 		g2.setStroke( new BasicStroke( 3 * ( ( length - i ) / ( ( float ) length ) ) ) );
 
-		final Assignment< IndicatorNode > pgSolution = trackingModel.getSolution();
+		final Assignment< IndicatorNode > pgSolution = trackingModel.getSolution(activeSolution);
 
 		final Tr2dSegmentationProblem tp0 = trackingModel.getTrackingProblem().getTimepoints().get( from_t );
 		final Tr2dSegmentationProblem tp1 = trackingModel.getTrackingProblem().getTimepoints().get( from_t + 1 );
@@ -165,7 +168,7 @@ public class Tr2dTrackingOverlay extends BdvOverlay {
 		int len = 3;
 
 		final Tr2dTrackingProblem tr2dPG = trackingModel.getTrackingProblem();
-		final Assignment< IndicatorNode > pgSolution = trackingModel.getSolution();
+		final Assignment< IndicatorNode > pgSolution = trackingModel.getSolution(activeSolution);
 
 		final AffineTransform2D trans = new AffineTransform2D();
 		getCurrentTransform2D( trans );
@@ -197,6 +200,13 @@ public class Tr2dTrackingOverlay extends BdvOverlay {
 				}
 			}
 		}
+	}
+	
+	public void setActiveSolution( int i ) {
+		if ( i < this.trackingModel.getDiverseSolutionBdvSources().size() && i >= 0 )
+			this.activeSolution = i;
+		else
+			this.activeSolution = 0;
 	}
 
 }

@@ -72,8 +72,8 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 		if ( model.getImgSolution() != null ) {
 			model.bdvAdd( model.getImgSolution(), "solution", 0, 5, new ARGBType( 0xFFFF00 ), true );
 		}
-//		model.bdvAdd( new Tr2dTrackingOverlay( model ), "overlay_tracking" );
-//		model.bdvAdd( new Tr2dFlowOverlay( model.getTr2dModel().getFlowModel() ), "overlay_flow", false );
+//		model.bdvAdd( new Tr2dTrackingOverlay( model ), "overlay_tracking", true );
+		model.bdvAdd( new Tr2dFlowOverlay( model.getTr2dModel().getFlowModel() ), "overlay_flow", false );
 
 		trackingProgressDialog = null;
 	}
@@ -189,9 +189,13 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 
 		if ( e.getSource().equals( bRun ) ) {
 			model.runInThread( false );
+			currentDiverseSolutionIndex = 0;
+			switchToSolution( currentDiverseSolutionIndex );
 		} else if ( e.getSource().equals( bRestart ) ) {
 			this.frameEditPanel.emptyUndoRedoStacks();
 			model.runInThread( true, true );
+			currentDiverseSolutionIndex = 0;
+			switchToSolution( currentDiverseSolutionIndex );
 		} else if ( e.getSource().equals( bRefetch ) ) {
 			final Thread t = new Thread( new Runnable() {
 
@@ -202,6 +206,8 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 				}
 			} );
 			t.start();
+			currentDiverseSolutionIndex = 0;
+			switchToSolution( currentDiverseSolutionIndex );
 		} else if ( e.getSource().equals( bPrevSolution ) ) {
 			currentDiverseSolutionIndex = ( currentDiverseSolutionIndex - 1 + model.getDiverseSolutionBdvSources().size() ) % model.getDiverseSolutionBdvSources().size();
 			switchToSolution( currentDiverseSolutionIndex );
@@ -277,12 +283,16 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 		this.txtMaxMovementsPerNode.setText( "" + model.getMaxMovementsToAddPerHypothesis() );
 		this.txtMaxDivisionSearchRadius.setText( "" + model.getMaxDivisionSearchRadius() );
 		this.txtMaxDivisionsPerNode.setText( "" + model.getMaxDivisionsToAddPerHypothesis() );
+		this.txtNumberDiverseSolutions.setText( "" + model.getNumberDiverseSolutions() );
 	}
 	
 	private void switchToSolution( int index ) {
 		System.out.println( "current index: " + index );
-		for( int i = 0; i < model.getDiverseSolutionBdvSources().size(); i++ )
+		for( int i = 0; i < model.getDiverseSolutionBdvSources().size(); i++ ) {
 			model.getDiverseSolutionBdvSources().get( i ).setActive( i == index );
+			System.out.println( model.getDiverseSolutionBdvSources().size() );
+		}
+		model.getTr2dTrackingOverlay().setActiveSolution( index );
 		lCurrentSolution.setText( "Solution " + ( index + 1 ) );
 	}
 }
