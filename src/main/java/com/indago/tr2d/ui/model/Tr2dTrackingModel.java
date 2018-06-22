@@ -533,18 +533,7 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 			final UnaryCostConstraintGraph fg = dmfg.getFg();
 			final List< AssignmentMapper< Variable, IndicatorNode > > assMapperList = dmfg.getListOfAssignmentMaps();
 
-		fgSolution = null;
-		try {
-			SolveGurobi.GRB_PRESOLVE = 0;
-			solver = new SolveGurobi();
-			fgSolution = solver.solve( fg, new DefaultLoggingGurobiCallback( Tr2dLog.gurobilog ) );
-			pgSolution = assMapper.map( fgSolution );
-		} catch ( final GRBException e ) {
-			e.printStackTrace();
-		} catch ( final IllegalStateException ise ) {
 			fgSolution = null;
-//			pgSolution = null;
-			pgSolutionList.clear();
 			try {
 				SolveGurobi.GRB_PRESOLVE = 0;
 				solver = new SolveGurobi();
@@ -565,9 +554,32 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 				e.printStackTrace();
 			} catch ( final IllegalStateException ise ) {
 				fgSolution = null;
-				pgSolution = null;
-				Tr2dLog.log.error( "Model is now infeasible and needs to be retracked!" );
-				fireModelInfeasibleEvent();
+	//			pgSolution = null;
+				pgSolutionList.clear();
+				try {
+					SolveGurobi.GRB_PRESOLVE = 0;
+					solver = new SolveGurobi();
+					fgSolution = solver.solve( fg, new DefaultLoggingGurobiCallback( Tr2dLog.gurobilog ) );
+					for ( final AssignmentMapper< Variable, IndicatorNode > mapper : assMapperList ) {
+						final Assignment< IndicatorNode > partSol = mapper.map(fgSolution);
+						double partSolutionCost = 0; 
+						for ( final IndicatorNode hypvar : mfg.getVarmap().valuesAs() ) {
+							if ( partSol.getAssignment( hypvar ) == 1 ) {
+								partSolutionCost = partSolutionCost + hypvar.getCost();
+							}
+						}
+						System.out.println( "\n partial solution value: " + partSolutionCost );
+						pgSolutionList.add( partSol );
+					}
+					pgSolution = pgSolutionList.get(0);
+				} catch ( final GRBException e ) {
+					e.printStackTrace();
+				} catch ( final IllegalStateException ise2 ) {
+					fgSolution = null;
+					pgSolution = null;
+					Tr2dLog.log.error( "Model is now infeasible and needs to be retracked!" );
+					fireModelInfeasibleEvent();
+				}
 			}
 		}
 		else {
