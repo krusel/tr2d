@@ -41,8 +41,8 @@ public class LabelingTimeLapse {
 	private final Tr2dSegmentationCollectionModel model;
 
 	// Parameters for FilteredComponentTrees
-	private final int minComponentSize;
-	private final int maxComponentSize;
+	private int minHypothesisSize;
+	private int maxHypothesisSize;
 	private final Filter maxGrowthPerStep;
 	private final boolean darkToBright = false;
 
@@ -55,13 +55,13 @@ public class LabelingTimeLapse {
 	 *
 	 * @param model
 	 */
-	public LabelingTimeLapse( final Tr2dSegmentationCollectionModel model ) {
+	public LabelingTimeLapse( final Tr2dSegmentationCollectionModel model, final int minHypothesisSize, final int maxHypothesisSize ) {
 		this.model = model;
 
 		// this should be a parameter
-		minComponentSize = 25;
-		maxComponentSize = ( int ) ( model.getModel().getRawData().dimension( 0 ) * model.getModel().getRawData().dimension( 1 ) - 1 );
-		maxGrowthPerStep = new MaxGrowthPerStep( maxComponentSize );
+		this.minHypothesisSize = minHypothesisSize;
+		this.maxHypothesisSize = maxHypothesisSize;
+		maxGrowthPerStep = new MaxGrowthPerStep( maxHypothesisSize );
 
 		frameLabelingBuilders = new ArrayList<>();
 		processedOrLoaded = false;
@@ -71,12 +71,16 @@ public class LabelingTimeLapse {
 	 * @return <code>true</code>, if any sum images for processing where found,
 	 *         <code>false</code> otherwise
 	 */
-	public boolean processFrames() {
+	public boolean processFrames( final List< ProgressListener > progressListeners ) {
 		try {
 			if ( getSegmentHypothesesImages().size() == 0 ) { return false; }
+			final RandomAccessibleInterval< IntType > firstSumImg = getSegmentHypothesesImages().get( 0 );
+
+			for ( final ProgressListener progressListener : progressListeners ) {
+				progressListener.resetProgress( "Computing segment hypotheses labelings...", ( int ) firstSumImg.dimension( 2 ) );
+			}
 
 			frameLabelingBuilders = new ArrayList<>();
-			final RandomAccessibleInterval< IntType > firstSumImg = getSegmentHypothesesImages().get( 0 );
 
 			for ( int frameId = 0; frameId < firstSumImg.dimension( 2 ); frameId++ ) {
 
@@ -97,14 +101,23 @@ public class LabelingTimeLapse {
 							FilteredComponentTree.buildComponentTree(
 									frame,
 									new IntType(),
-									minComponentSize,
-									maxComponentSize,
+									minHypothesisSize,
+									maxHypothesisSize,
 									maxGrowthPerStep,
 									darkToBright );
 					labelingBuilder.buildLabelingForest( tree );
+
+				}
+				for ( final ProgressListener progressListener : progressListeners ) {
+					progressListener.hasProgressed();
 				}
 			}
+
+			for ( final ProgressListener progressListener : progressListeners ) {
+				progressListener.hasCompleted();
+			}
 			processedOrLoaded = true;
+
 		} catch ( final IllegalAccessException e ) {
 			// This happens if getSegmentHypothesesImages() is called but none are there yet...
 			processedOrLoaded = false;
@@ -218,6 +231,20 @@ public class LabelingTimeLapse {
 				progressListener.hasProgressed();
 			}
 		}
+	}
+
+	/**
+	 * @param minPixelComponentSize
+	 */
+	public void setMinSegmentSize( final int minHypothesisSize ) {
+		this.minHypothesisSize = minHypothesisSize;
+	}
+
+	/**
+	 * @param maxPixelComponentSize
+	 */
+	public void setMaxSegmentSize( final int maxHypothesisSize ) {
+		this.maxHypothesisSize = maxHypothesisSize;
 	}
 
 }

@@ -8,7 +8,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 
 import com.indago.io.ProjectFolder;
-import com.indago.tr2d.Tr2dLog;
 
 /**
  * @author jug
@@ -30,8 +29,15 @@ public class Tr2dProjectFolder extends ProjectFolder {
 	 */
 	public Tr2dProjectFolder( final File baseFolder ) throws IOException {
 		super( "TR2D", baseFolder );
-		addFile( RAW_DATA, "raw.tif" );
-		addFile( FRAME_PROPERTIES, "frame.props" );
+	}
+
+	public void initialize() throws IOException {
+		if ( Tr2dProjectFolder.isValidProjectFolder( super.getFolder() ) ) {
+			addFile( RAW_DATA, "raw.tif" );
+			addFile( FRAME_PROPERTIES, "frame.props" );
+		} else {
+			System.out.println( "Not a valid project folder to initialize!" );
+		}
 		try {
 			addFolder( SEGMENTATION_FOLDER, "segmentation" );
 			addFolder( FLOW_FOLDER, "flow" );
@@ -41,18 +47,31 @@ public class Tr2dProjectFolder extends ProjectFolder {
 		}
 	}
 
+	public void initialize( final File rawToCopy ) throws IOException {
+		deleteContent();
+		Files.copy( rawToCopy.toPath(), new File( super.getFolder() + File.separator + "RAW.tif" ).toPath() );
+		initialize();
+	}
+
 	/**
-	 * @param pathToRawDataFile
+	 * checks if the given <code>File</code> is a folder, if write access is
+	 * allowed, and if a 'RAW.tif' file is contained in it.
+	 *
+	 * @param folder
 	 */
-	public void restartWithRawDataFile( final String pathToRawDataFile ) {
-		try {
-			deleteContent();
-			Files.copy( new File( pathToRawDataFile ).toPath(), getFile( RAW_DATA ).getFile().toPath() );
-		} catch ( final IOException e ) {
-			Tr2dLog.log.error( String.format( "Project folder (%s) could not be set up.", super.getAbsolutePath() ) );
-			e.printStackTrace();
-			System.exit( 3 );
+	public static boolean isValidProjectFolder( final File folder ) {
+		if (!folder.isDirectory()) return false;
+		if (!folder.canWrite()) return false;
+
+		boolean rawExists = false;
+		final File[] content = folder.listFiles();
+		for ( final File f : content ) {
+			if ( f.getName().toLowerCase().contains( "raw.tif" ) ) {
+				rawExists = true;
+				break;
+			}
 		}
+		return rawExists;
 	}
 
 }

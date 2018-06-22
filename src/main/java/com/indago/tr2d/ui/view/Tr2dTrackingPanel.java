@@ -45,7 +45,7 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 	private JButton bRun;
 	private JButton bRestart;
 	private JButton bRestartFG;
-	private JButton bRefetch;
+	private JButton bFetch;
 
 	private Tr2dFrameEditPanel frameEditPanel;
 
@@ -55,6 +55,8 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 	private JTextField txtMaxDivisionsPerNode;
 	private JTextField txtMaxMovementSearchRadius;
 	private JTextField txtMaxDivisionSearchRadius;
+	private JTextField txtMaxPixelComponentSize;
+	private JTextField txtMinPixelComponentSize;
 	
 	private JTextField txtNumberDiverseSolutions;
 	private JButton bPrevSolution;
@@ -74,14 +76,9 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 		model.addStateChangedListener( this );
 
 		buildGui();
+		model.populateBdv();
+//todo: model.getDiverseSolutionBdvSources().addAll( model.bdvGetSources().subList( 1, model.bdvGetSources().size() ) );
 
-		model.bdvAdd( model.getTr2dModel().getRawData(), "RAW" );
-		if ( model.getImgSolution() != null ) {
-			model.bdvAdd( model.getImgSolution(), "solution", 0, 5, new ARGBType( 0xFF0000 ), true );
-			model.getDiverseSolutionBdvSources().addAll( model.bdvGetSources().subList( 1, model.bdvGetSources().size() ) );
-		}
-//		model.bdvAdd( new Tr2dTrackingOverlay( model ), "overlay_tracking", true );
-		model.bdvAdd( new Tr2dFlowOverlay( model.getTr2dModel().getFlowModel() ), "overlay_flow", false );
 
 		trackingProgressDialog = null;
 	}
@@ -114,19 +111,43 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 		final JPanel controls = new JPanel( new MigLayout() );
 		final JPanel viewer = new JPanel( new BorderLayout() );
 
+		final JPanel panelFetch = new JPanel( new MigLayout() );
+		panelFetch.setBorder( BorderFactory.createTitledBorder( "segmentation fetching" ) );
+
+		txtMaxPixelComponentSize = new JTextField( 3 );
+		txtMaxPixelComponentSize.addActionListener( this );
+		txtMaxPixelComponentSize.addFocusListener( this );
+		txtMinPixelComponentSize = new JTextField( 3 );
+		txtMinPixelComponentSize.addActionListener( this );
+		txtMinPixelComponentSize.addFocusListener( this );
+
+		bFetch = new JButton( "fetch" );
+		bFetch.addActionListener( this );
+
+		panelFetch.add( new JLabel( "Max component size:" ), "growx" );
+		panelFetch.add( txtMaxPixelComponentSize, "growx, wrap" );
+		panelFetch.add( new JLabel( "Min component size:" ), "growx" );
+		panelFetch.add( txtMinPixelComponentSize, "growx, wrap" );
+		panelFetch.add( bFetch, "growx, wrap" );
+
 		final JPanel panelGraphConstructionParams = new JPanel( new MigLayout() );
-		txtMaxMovementSearchRadius = new JTextField( "" + model.getMaxMovementSearchRadius(), 3 );
+		txtMaxMovementSearchRadius = new JTextField( 3 );
 		txtMaxMovementSearchRadius.addActionListener( this );
 		txtMaxMovementSearchRadius.addFocusListener( this );
-		txtMaxMovementsPerNode = new JTextField( "" + model.getMaxMovementsToAddPerHypothesis(), 3 );
+		txtMaxMovementsPerNode = new JTextField( 3 );
 		txtMaxMovementsPerNode.addActionListener( this );
 		txtMaxMovementsPerNode.addFocusListener( this );
-		txtMaxDivisionSearchRadius = new JTextField( "" + model.getMaxDivisionSearchRadius(), 3 );
+		txtMaxDivisionSearchRadius = new JTextField( 3 );
 		txtMaxDivisionSearchRadius.addActionListener( this );
 		txtMaxDivisionSearchRadius.addFocusListener( this );
-		txtMaxDivisionsPerNode = new JTextField( "" + model.getMaxDivisionsToAddPerHypothesis(), 3 );
+		txtMaxDivisionsPerNode = new JTextField( 3 );
 		txtMaxDivisionsPerNode.addActionListener( this );
 		txtMaxDivisionsPerNode.addFocusListener( this );
+
+		bRun = new JButton( "track" );
+		bRun.addActionListener( this );
+		bRestart = new JButton( "restart" );
+		bRestart.addActionListener( this );
 
 		panelGraphConstructionParams.setBorder( BorderFactory.createTitledBorder( "graph parameters" ) );
 		panelGraphConstructionParams.add( new JLabel( "Max move radius:" ), "growx" );
@@ -137,6 +158,8 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 		panelGraphConstructionParams.add( txtMaxDivisionSearchRadius, "growx, wrap" );
 		panelGraphConstructionParams.add( new JLabel( "Max division assmts:" ), "growx" );
 		panelGraphConstructionParams.add( txtMaxDivisionsPerNode, "growx, wrap" );
+		panelGraphConstructionParams.add( bRun, "growx, wrap" );
+		panelGraphConstructionParams.add( bRestart, "growx, wrap" );
 
 		final JPanel panelDiversityParams = new JPanel( new MigLayout() );
 		txtNumberDiverseSolutions = new JTextField( "" + model.getNumberDiverseSolutions(), 3 );
@@ -187,14 +210,8 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 		panelDiversityCostParams.add( new JLabel( "Divisions:" ), "growx" );
 		panelDiversityCostParams.add( txtDiverseDivisionCost, "growx, wrap" );
 		
-		bRun = new JButton( "track" );
-		bRun.addActionListener( this );
-		bRestart = new JButton( "restart" );
-		bRestart.addActionListener( this );
 		bRestartFG = new JButton( "restart FG only" );
 		bRestartFG.addActionListener( this );
-		bRefetch = new JButton( "fetch & track" );
-		bRefetch.addActionListener( this );
 
 		model.bdvSetHandlePanel(
 				new BdvHandlePanel( ( Frame ) this.getTopLevelAncestor(), Bdv
@@ -202,18 +219,18 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 						.is2D()
 						.inputTriggerConfig( model.getTr2dModel().getDefaultInputTriggerConfig() ) ) );
 
+		controls.add( panelFetch, "growx, wrap" );
 		controls.add( panelGraphConstructionParams, "growx, wrap" );
 		controls.add( panelDiversityParams, "growx, wrap" );
 		controls.add( panelDiversityCostParams, "growx, wrap" );
 
-		controls.add( bRun, "growx, wrap" );
-		controls.add( bRestart, "growx, wrap" );
 		controls.add( bRestartFG, "growx, wrap" );
-		controls.add( bRefetch, "growx, wrap" );
 		viewer.add( model.bdvGetHandlePanel().getViewerPanel(), BorderLayout.CENTER );
 
 		final JSplitPane splitPane = new JSplitPane( JSplitPane.HORIZONTAL_SPLIT, controls, viewer );
 		panel.add( splitPane, BorderLayout.CENTER );
+
+		populateTextFieldsViaModelValues();
 
 		return panel;
 	}
@@ -242,13 +259,13 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 			model.runInThread( true, false );
 			currentDiverseSolutionIndex = 0;
 			switchToSolution( currentDiverseSolutionIndex );
-		} else if ( e.getSource().equals( bRefetch ) ) {
+		} else if ( e.getSource().equals( bFetch ) ) {
 			final Thread t = new Thread( new Runnable() {
 
 				@Override
 				public void run() {
-					model.reset();
-					model.runInThread( true );
+					model.fetch();
+					model.populateBdv();
 				}
 			} );
 			t.start();
@@ -274,11 +291,10 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 	 */
 	@Override
 	public void focusLost( final FocusEvent e ) {
-		if ( e.getSource().equals( txtMaxMovementSearchRadius ) ||
-			 e.getSource().equals( txtMaxMovementsPerNode ) ||
-			 e.getSource().equals( txtMaxDivisionSearchRadius ) ||
-			 e.getSource().equals( txtMaxDivisionsPerNode ) ) {
-			parseAndSetGraphParametersInModel();
+		if ( e.getSource().equals( txtMaxMovementSearchRadius ) || e.getSource().equals( txtMaxMovementsPerNode ) || e.getSource().equals(
+				txtMaxDivisionSearchRadius ) || e.getSource().equals( txtMaxDivisionsPerNode ) || e.getSource().equals(
+						txtMaxPixelComponentSize ) || e.getSource().equals( txtMinPixelComponentSize ) ) {
+			parseAndSetParametersInModel();
 			model.saveStateToFile();
 		}
 		if ( e.getSource().equals( txtDiverseSegmentCost ) ||
@@ -304,7 +320,7 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 	/**
 	 *
 	 */
-	private void parseAndSetGraphParametersInModel() {
+	private void parseAndSetParametersInModel() {
 		try {
 			model.setMaxMovementSearchRadius( Integer.parseInt( txtMaxMovementSearchRadius.getText() ) );
 		} catch ( final NumberFormatException e ) {
@@ -324,6 +340,20 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 			model.setMaxDivisionsToAddPerHypothesis( Integer.parseInt( txtMaxDivisionsPerNode.getText() ) );
 		} catch ( final NumberFormatException e ) {
 			txtMaxDivisionsPerNode.setText( "" + model.getMaxDivisionsToAddPerHypothesis() );
+		}
+		try {
+			if ( txtMaxPixelComponentSize.getText().trim().isEmpty() ) {
+				model.setMaxPixelComponentSize( Integer.MAX_VALUE );
+			} else {
+				model.setMaxPixelComponentSize( Integer.parseInt( txtMaxPixelComponentSize.getText() ) );
+			}
+		} catch ( final NumberFormatException e ) {
+			txtMaxPixelComponentSize.setText( "" + model.getMaxPixelComponentSize() );
+		}
+		try {
+			model.setMinPixelComponentSize( Integer.parseInt( txtMinPixelComponentSize.getText() ) );
+		} catch ( final NumberFormatException e ) {
+			txtMinPixelComponentSize.setText( "" + model.getMinPixelComponentSize() );
 		}
 	}
 
@@ -361,10 +391,21 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 	 */
 	@Override
 	public void stateChanged( final ChangeEvent e ) {
+		populateTextFieldsViaModelValues();
+	}
+
+	private void populateTextFieldsViaModelValues() {
 		this.txtMaxMovementSearchRadius.setText( "" + model.getMaxMovementSearchRadius() );
 		this.txtMaxMovementsPerNode.setText( "" + model.getMaxMovementsToAddPerHypothesis() );
 		this.txtMaxDivisionSearchRadius.setText( "" + model.getMaxDivisionSearchRadius() );
 		this.txtMaxDivisionsPerNode.setText( "" + model.getMaxDivisionsToAddPerHypothesis() );
+		if ( model.getMaxPixelComponentSize() == Integer.MAX_VALUE ) {
+			this.txtMaxPixelComponentSize.setText( "" );
+		} else {
+			this.txtMaxPixelComponentSize.setText( "" + model.getMaxPixelComponentSize() );
+		}
+		this.txtMinPixelComponentSize.setText( "" + model.getMinPixelComponentSize() );
+		
 		this.txtDiverseSegmentCost.setText( "" + model.getDiverseSegmentCost() );
 		this.txtDiverseAppearanceCost.setText( "" + model.getDiverseAppearanceCost() );
 		this.txtDiverseDisappearanceCost.setText( "" + model.getDiverseDisappearanceCost() );

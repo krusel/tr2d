@@ -3,12 +3,16 @@
  */
 package com.indago.tr2d.ui.model;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 import javax.swing.JOptionPane;
@@ -44,6 +48,7 @@ import com.indago.tr2d.pg.Tr2dTrackingProblem;
 import com.indago.tr2d.ui.listener.ModelInfeasibleListener;
 import com.indago.tr2d.ui.listener.SolutionChangedListener;
 import com.indago.tr2d.ui.util.SolutionVisulizer;
+import com.indago.tr2d.ui.view.bdv.overlays.Tr2dFlowOverlay;
 import com.indago.tr2d.ui.view.bdv.overlays.Tr2dTrackingOverlay;
 import com.indago.ui.bdv.BdvWithOverlaysOwner;
 import com.indago.util.TicToc;
@@ -73,6 +78,7 @@ import net.imglib2.util.ValuePair;
 public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 
 	private final String FILENAME_STATE = "state.csv";
+	private final String FILENAME_COST_PARAMS = "cost_params.tr2dcosts";
 	private final ProjectFolder dataFolder;
 
 	private final String FOLDER_LABELING_FRAMES = "labeling_frames";
@@ -88,7 +94,10 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 	private double maxDivisionSearchRadius = 50;
 	private int maxMovementsToAddPerHypothesis = 4;
 	private int maxDivisionsToAddPerHypothesis = 8;
-	
+
+	private int maxPixelComponentSize = Integer.MAX_VALUE;
+	private int minPixelComponentSize = 1;
+
 	private int numberDiverseSolutions = 1;
 
 	private double diverseSegmentCost = 0.0;
@@ -174,7 +183,7 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 		imgs.add( imgSolution );
 
 		// Loading hypotheses labeling frames if exist in project folder
-		this.labelingFrames = new LabelingTimeLapse( tr2dSegModel );
+		this.labelingFrames = new LabelingTimeLapse( tr2dSegModel, this.getMinPixelComponentSize(), this.getMaxPixelComponentSize() );
 		try {
 			hypothesesFolder = dataFolder.addFolder( FOLDER_LABELING_FRAMES );
 			hypothesesFolder.loadFiles();
@@ -184,31 +193,50 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 		}
 
 		loadStateFromProjectFolder();
+		loadCostParametersFromProjectFolder();
 	}
 
 	/**
 	 * (Re-)fetches all hypotheses and marks this tracking model as 'reset'.
 	 */
-	public void reset() {
+	public void fetch() {
+		for ( final ProgressListener progressListener : progressListeners ) {
+			progressListener.resetProgress( "Purging currently fetched segment hypotheses... (1/3)", 3 );
+		}
+
+		// clear BDV content
+		bdvRemoveAll();
+		bdvRemoveAllOverlays();
+
+		for ( final ProgressListener progressListener : progressListeners ) {
+			progressListener.hasProgressed( "Purging currently fetched segment hypotheses... (2/3)" );
+		}
+
 		// purge segmentation data
 		dataFolder.getFile( FILENAME_TRACKING ).getFile().delete();
 		try {
 			dataFolder.getFolder( FOLDER_LABELING_FRAMES ).deleteContent();
 		} catch ( final IOException e ) {
 			if ( dataFolder.getFolder( FOLDER_LABELING_FRAMES ).exists() ) {
-				Tr2dLog.log.error( "Labeling frames could not be deleted." );
+				Tr2dLog.log.error( "Labeling frames exist but cannot be deleted." );
 			}
 		}
+
 		// recollect segmentation data
 		processSegmentationInputs( true );
+
 		// purge problem graph
 		tr2dTraProblem = null;
+
+		for ( final ProgressListener progressListener : progressListeners ) {
+			progressListener.hasCompleted();
+		}
 	}
 
 	/**
 	 * Prepares the tracking model (Step1: builds pg and stores intermediate
 	 * data in
-	 * project folder).0x00FF00
+	 * project folder).
 	 */
 	private boolean preparePG() {
 		if ( processSegmentationInputs( false ) ) {
@@ -324,13 +352,13 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 
 			@Override
 			public void run() {
-				Tr2dTrackingModel.this.run( forceResolve, forceRebuildPG );
-				
-				final int bdvTime = bdvHandlePanel.getViewerPanel().getState().getCurrentTimepoint();
+				bdvRemoveAllOverlays();
 				bdvRemoveAll();
-				diverseSolutionBdvSources.clear();
-				
-				bdvAdd( getTr2dModel().getRawData(), "RAW" );
+
+				Tr2dTrackingModel.this.run( forceResolve, forceRebuildPG );
+
+				final int bdvTime = bdvHandlePanel.getViewerPanel().getState().getCurrentTimepoint();
+				populateBdv();
 				bdvHandlePanel.getViewerPanel().setTimepoint( bdvTime );
 				
 				if ( numberDiverseSolutions > 1 ) {
@@ -372,6 +400,18 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 		return t;
 	}
 
+	public void populateBdv() {
+		bdvRemoveAll();
+		bdvRemoveAllOverlays();
+
+		bdvAdd( getTr2dModel().getRawData(), "RAW" );
+		if ( getImgSolution() != null ) {
+			bdvAdd( getImgSolution(), "solution", 0, 5, new ARGBType( 0x00FF00 ), true );
+		}
+		bdvAdd( new Tr2dTrackingOverlay( this ), "overlay_tracking" );
+		bdvAdd( new Tr2dFlowOverlay( getTr2dModel().getFlowModel() ), "overlay_flow", false );
+	}
+
 	/**
 	 *
 	 */
@@ -406,8 +446,13 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 	 *         no segmentation was found.
 	 */
 	public boolean processSegmentationInputs( final boolean forceHypothesesRefetch ) {
+
 		if ( forceHypothesesRefetch || labelingFrames.needProcessing() ) {
-			if ( !labelingFrames.processFrames() ) {
+
+			labelingFrames.setMinSegmentSize( getMinPixelComponentSize() );
+			labelingFrames.setMaxSegmentSize( getMaxPixelComponentSize() );
+
+			if ( !labelingFrames.processFrames( progressListeners ) ) {
 				final String msg = "Segmentation Hypotheses could not be accessed!\nYou must create a segmentation prior to starting the tracking!";
 				Tr2dLog.log.error( msg );
 				JOptionPane.showMessageDialog( Tr2dContext.guiFrame, msg, "No segmentation found...", JOptionPane.ERROR_MESSAGE );
@@ -488,6 +533,15 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 			final UnaryCostConstraintGraph fg = dmfg.getFg();
 			final List< AssignmentMapper< Variable, IndicatorNode > > assMapperList = dmfg.getListOfAssignmentMaps();
 
+		fgSolution = null;
+		try {
+			SolveGurobi.GRB_PRESOLVE = 0;
+			solver = new SolveGurobi();
+			fgSolution = solver.solve( fg, new DefaultLoggingGurobiCallback( Tr2dLog.gurobilog ) );
+			pgSolution = assMapper.map( fgSolution );
+		} catch ( final GRBException e ) {
+			e.printStackTrace();
+		} catch ( final IllegalStateException ise ) {
 			fgSolution = null;
 //			pgSolution = null;
 			pgSolutionList.clear();
@@ -876,6 +930,40 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 	}
 
 	/**
+	 * @return the maximum size (in pixels) a component can be in order
+	 *         to count as a valid segmentation hypothesis.
+	 */
+	public int getMaxPixelComponentSize() {
+		return maxPixelComponentSize;
+	}
+
+	/**
+	 * @param maxPixelComponentSize
+	 *            the maximum size (in pixels) a component can be in order
+	 *            to count as a valid segmentation hypothesis.
+	 */
+	public void setMaxPixelComponentSize( final int maxPixelComponentSize ) {
+		this.maxPixelComponentSize = maxPixelComponentSize;
+	}
+
+	/**
+	 * @return the minimum size (in pixels) a component needs to be in order
+	 *         to count as a valid segmentation hypothesis.
+	 */
+	public int getMinPixelComponentSize() {
+		return minPixelComponentSize;
+	}
+
+	/**
+	 * @param minPixelComponentSize
+	 *            the minimum size (in pixels) a component needs to be in order
+	 *            to count as a valid segmentation hypothesis.
+	 */
+	public void setMinPixelComponentSize( final int minPixelComponentSize ) {
+		this.minPixelComponentSize = minPixelComponentSize;
+	}
+
+	/**
 	 * @return the numberDiverseSolutions
 	 */
 	public int getNumberDiverseSolutions() {
@@ -974,6 +1062,10 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 	public void saveStateToFile() {
 		try {
 			final FileWriter writer = new FileWriter( new File( dataFolder.getFolder(), FILENAME_STATE ) );
+			writer.append( "" + this.maxPixelComponentSize );
+			writer.append( ", " );
+			writer.append( "" + this.minPixelComponentSize );
+			writer.append( ", " );
 			writer.append( "" + this.maxMovementSearchRadius );
 			writer.append( ", " );
 			writer.append( "" + this.maxMovementsToAddPerHypothesis );
@@ -997,11 +1089,15 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 			final List< String[] > rows = parser.parseAll( new FileReader( guiState ) );
 			final String[] strings = rows.get( 0 );
 			try {
-				this.maxMovementSearchRadius = Double.parseDouble( strings[ 0 ] );
-				this.maxMovementsToAddPerHypothesis = Integer.parseInt( strings[ 1 ] );
-				this.maxDivisionSearchRadius = Double.parseDouble( strings[ 2 ] );
-				this.maxDivisionsToAddPerHypothesis = Integer.parseInt( strings[ 3 ] );
+				this.maxPixelComponentSize = Integer.parseInt( strings[ 0 ] );
+				this.minPixelComponentSize = Integer.parseInt( strings[ 1 ] );
+				this.maxMovementSearchRadius = Double.parseDouble( strings[ 2 ] );
+				this.maxMovementsToAddPerHypothesis = Integer.parseInt( strings[ 3 ] );
+				this.maxDivisionSearchRadius = Double.parseDouble( strings[ 4 ] );
+				this.maxDivisionsToAddPerHypothesis = Integer.parseInt( strings[ 5 ] );
 			} catch ( final NumberFormatException e ) {
+				this.maxPixelComponentSize = 5000;
+				this.minPixelComponentSize = 1;
 				this.maxMovementSearchRadius = 25;
 				this.maxMovementsToAddPerHypothesis = 5;
 				this.maxDivisionSearchRadius = 25;
@@ -1009,6 +1105,16 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 			}
 		} catch ( final FileNotFoundException e ) {}
 		fireStateChangedEvent();
+	}
+
+	private void loadCostParametersFromProjectFolder() {
+		final File costParamsFile = dataFolder.addFile( FILENAME_COST_PARAMS ).getFile();
+		try {
+			importCostParametrization( costParamsFile );
+			fireStateChangedEvent();
+		} catch ( final IOException e ) {
+			Tr2dLog.log.warn( "No cost parameter file found in project folder. Falling back to default values." );
+		}
 	}
 
 	public void addStateChangedListener( final ChangeListener listener ) {
@@ -1024,4 +1130,64 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 	public void fireStateChangedEvent() {
 		stateChangedListeners.forEach( l -> l.stateChanged( null ) );
 	}
+
+	/**
+	 * Saves all cost parameters to a file called
+	 * <code>FILENAME_COST_PARAMS</code> using
+	 * <code>exportCostParametrization(...)</code>.
+	 */
+	public void saveCostParametersToProjectFolder() {
+		try {
+			exportCostParametrization( dataFolder.getFile( FILENAME_COST_PARAMS ).getFile() );
+		} catch ( final IOException e ) {
+			Tr2dLog.log.error( "Cannot save cost parameters to file '" + dataFolder.getFile( FILENAME_COST_PARAMS ).getAbsolutePath() + "'." );
+		}
+	}
+
+	/**
+	 * @param costsFile
+	 */
+	public void importCostParametrization( final File costsFile ) throws IOException {
+		final BufferedReader costReader = new BufferedReader( new FileReader( costsFile ) );
+
+		String line = "";
+		for ( final CostFactory< ? > cf : getCostFactories() ) {
+			final double[] params = cf.getParameters().getAsArray();
+			for ( int j = 0; j < params.length; j++ ) {
+				do {
+					line = costReader.readLine();
+				}
+				while ( line.trim().startsWith( "#" ) || line.trim().isEmpty() );
+
+				params[ j ] = Double.parseDouble( line );
+			}
+			cf.getParameters().setFromArray( params );
+		}
+		costReader.close();
+	}
+
+	/**
+	 * @param costsFile
+	 * @throws IOException
+	 */
+	public void exportCostParametrization( final File costsFile ) throws IOException {
+		final SimpleDateFormat sdfDate = new SimpleDateFormat( "yyyy-MM-dd HH:mm:ss" );
+		final Date now = new Date();
+		final String strNow = sdfDate.format( now );
+
+		final BufferedWriter costWriter = new BufferedWriter( new FileWriter( costsFile ) );
+		costWriter.write( "# Tr2d cost parameters export from " + strNow + "\n" );
+
+		for ( final CostFactory< ? > cf : getCostFactories() ) {
+			costWriter.write( String.format( "# PARAMS FOR: %s\n", cf.getName() ) );
+			final double[] params = cf.getParameters().getAsArray();
+			for ( int j = 0; j < params.length; j++ ) {
+				costWriter.write( String.format( "# >> %s\n", cf.getParameters().getName( j ) ) );
+				costWriter.write( String.format( "%f\n", params[ j ] ) );
+			}
+		}
+		costWriter.flush();
+		costWriter.close();
+	}
+
 }
