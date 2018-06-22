@@ -89,7 +89,13 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 	private int maxMovementsToAddPerHypothesis = 4;
 	private int maxDivisionsToAddPerHypothesis = 8;
 	
-	private int numberDiverseSolutions = 2;
+	private int numberDiverseSolutions = 1;
+
+	private double diverseSegmentCost = 0.0;
+	private double diverseAppearanceCost = 0.0;
+	private double diverseDisappearanceCost = 0.0;
+	private double diverseMovementCost = 0.0;
+	private double diverseDivisionCost = 0.0;
 
 	private final List< CostFactory< ? > > costFactories = new ArrayList<>();
 	private final CostFactory< LabelingSegment > segmentCosts;
@@ -262,6 +268,9 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 		} else if ( mfg == null ) {
 			prepareFG();
 			doSolving = true;
+		} else if ( numberDiverseSolutions > 1 && forceSolving ) {
+			prepareFG();
+			doSolving = true;
 		}
 		
 		System.out.println(" ");
@@ -276,6 +285,13 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 				imgSolutionList.clear();
 				for ( Assignment< IndicatorNode > divSolution : pgSolutionList ) {
 					imgSolutionList.add( SolutionVisulizer.drawSolutionSegmentImages( this, divSolution) );
+				}
+				if ( numberDiverseSolutions == 2 ) {
+					imgSolutionList.clear();
+					Assignment< IndicatorNode > divSolutionOne = pgSolutionList.get(0);
+					Assignment< IndicatorNode > divSolutionTwo = pgSolutionList.get(1);
+					imgSolutionList.add( SolutionVisulizer.drawSolutionSegmentImages( this, divSolutionOne, divSolutionTwo ) );
+					imgSolutionList.add( SolutionVisulizer.drawSolutionSegmentImages( this, divSolutionTwo, divSolutionOne ) );
 				}
 			} else {
 				imgSolution = SolutionVisulizer.drawSolutionSegmentImages( this, pgSolution );
@@ -459,7 +475,7 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 
 		if ( numberDiverseSolutions > 1 ) {
 			tictoc.tic( "Duplicating FactorGraph for created Tr2dTrackingProblem..." );
-			dmfg = FactorGraphFactory.extendFactorGraphForDiversity( mfg, numberDiverseSolutions, progressListeners );
+			dmfg = FactorGraphFactory.extendFactorGraphForDiversity( mfg, numberDiverseSolutions, diverseSegmentCost, diverseAppearanceCost, diverseDisappearanceCost, diverseMovementCost, diverseDivisionCost, progressListeners );
 			tictoc.toc( "done!" );
 		}
 	}
@@ -481,6 +497,13 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 				fgSolution = solver.solve( fg, new DefaultLoggingGurobiCallback( Tr2dLog.gurobilog ) );
 				for ( final AssignmentMapper< Variable, IndicatorNode > mapper : assMapperList ) {
 					final Assignment< IndicatorNode > partSol = mapper.map(fgSolution);
+					double partSolutionCost = 0; 
+					for ( final IndicatorNode hypvar : mfg.getVarmap().valuesAs() ) {
+						if ( partSol.getAssignment( hypvar ) == 1 ) {
+							partSolutionCost = partSolutionCost + hypvar.getCost();
+						}
+					}
+					System.out.println( "\n partial solution value: " + partSolutionCost );
 					pgSolutionList.add( partSol );
 				}
 				pgSolution = pgSolutionList.get(0);
@@ -506,6 +529,13 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 				solver = new SolveGurobi();
 				fgSolution = solver.solve( fg, new DefaultLoggingGurobiCallback( Tr2dLog.gurobilog ) );
 				pgSolution = assMapper.map( fgSolution );
+				double partSolutionCost = 0; 
+				for ( final IndicatorNode hypvar : mfg.getVarmap().valuesAs() ) {
+					if ( pgSolution.getAssignment( hypvar ) == 1 ) {
+						partSolutionCost = partSolutionCost + hypvar.getCost();
+					}
+				}
+				System.out.println( "\n partial solution value: " + partSolutionCost );
 				pgSolutionList.add( pgSolution );
 			} catch ( final GRBException e ) {
 				e.printStackTrace();
@@ -715,6 +745,13 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 	}
 
 	/**
+	 * @return the dmfg
+	 */
+	public MappedDiverseFactorGraph getMappedDiverseFactorGraph() {
+		return dmfg;
+	}
+
+	/**
 	 * @param progressListener
 	 */
 	public void addProgressListener( final ProgressListener progressListener ) {
@@ -851,6 +888,76 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 	 */
 	public void setNumberDiverseSolutions( final int numberDiverseSolutions ) {
 		this.numberDiverseSolutions = numberDiverseSolutions;
+	}
+
+	/**
+	 * @return the diverseSegmentCost
+	 */
+	public double getDiverseSegmentCost() {
+		return diverseSegmentCost;
+	}
+
+	/**
+	 * @param diverseSegmentCost the diverseSegmentCost to set
+	 */
+	public void setDiverseSegmentCost(double diverseSegmentCost) {
+		this.diverseSegmentCost = diverseSegmentCost;
+	}
+
+	/**
+	 * @return the diverseAppearanceCost
+	 */
+	public double getDiverseAppearanceCost() {
+		return diverseAppearanceCost;
+	}
+
+	/**
+	 * @param diverseAppearanceCost the diverseAppearanceCost to set
+	 */
+	public void setDiverseAppearanceCost(double diverseAppearanceCost) {
+		this.diverseAppearanceCost = diverseAppearanceCost;
+	}
+
+	/**
+	 * @return the diverseDisappearanceCost
+	 */
+	public double getDiverseDisappearanceCost() {
+		return diverseDisappearanceCost;
+	}
+
+	/**
+	 * @param diverseDisappearanceCost the diverseDisappearanceCost to set
+	 */
+	public void setDiverseDisappearanceCost(double diverseDisappearanceCost) {
+		this.diverseDisappearanceCost = diverseDisappearanceCost;
+	}
+
+	/**
+	 * @return the diverseMovementCost
+	 */
+	public double getDiverseMovementCost() {
+		return diverseMovementCost;
+	}
+
+	/**
+	 * @param diverseMovementCost the diverseMovementCost to set
+	 */
+	public void setDiverseMovementCost(double diverseMovementCost) {
+		this.diverseMovementCost = diverseMovementCost;
+	}
+
+	/**
+	 * @return the diverseDivisionCost
+	 */
+	public double getDiverseDivisionCost() {
+		return diverseDivisionCost;
+	}
+
+	/**
+	 * @param diverseDivisionCost the diverseDivisionCost to set
+	 */
+	public void setDiverseDivisionCost(double diverseDivisionCost) {
+		this.diverseDivisionCost = diverseDivisionCost;
 	}
 
 	public List<BdvSource> getDiverseSolutionBdvSources() {

@@ -4,6 +4,7 @@
 package com.indago.tr2d.ui.util;
 
 import com.indago.fg.Assignment;
+import com.indago.fg.MappedDiverseFactorGraph;
 import com.indago.fg.MappedFactorGraph;
 import com.indago.io.DataMover;
 import com.indago.pg.IndicatorNode;
@@ -61,6 +62,35 @@ public class SolutionVisulizer {
 		return ret;
 	}
 
+	public static RandomAccessibleInterval<IntType> drawSolutionSegmentImages(
+			final Tr2dTrackingModel trackingModel,
+			final Assignment<IndicatorNode> solution,
+			final Assignment<IndicatorNode> divSolution ) {
+
+		final RandomAccessibleInterval< IntType > ret =
+				DataMover.createEmptyArrayImgLike( trackingModel.getTr2dModel().getRawData(), new IntType() );
+
+		final MappedDiverseFactorGraph dmfg = trackingModel.getMappedDiverseFactorGraph();
+		if ( dmfg != null && solution != null && divSolution != null ) {
+
+			int time = 0;
+			final int curColorId = 1;
+			for ( final Tr2dSegmentationProblem segProblem : trackingModel.getTrackingProblem().getTimepoints() ) {
+				for ( final SegmentNode segVar : segProblem.getSegments() ) {
+					for ( final AppearanceHypothesis app : segVar.getInAssignments().getAppearances() ) {
+						if ( solution.getAssignment( app ) == 1 ) { // || time == 0
+							drawLineageWithId( ret, solution, divSolution, time, segVar, curColorId ); // 10 + curColorId
+//							curColorId++;
+						}
+					}
+				}
+				time++;
+			}
+		}
+
+		return ret;
+	}
+
 	/**
 	 * @param segVar
 	 * @param curColorId
@@ -100,6 +130,45 @@ public class SolutionVisulizer {
 				if ( solution.getAssignment( div ) == 1 ) {
 					drawLineageWithId( imgSolution, solution, time + 1, div.getDest1(), curColorId );
 					drawLineageWithId( imgSolution, solution, time + 1, div.getDest2(), curColorId );
+				}
+			}
+		}
+	}
+
+	private static void drawLineageWithId(
+			final RandomAccessibleInterval< IntType > imgSolution,
+			final Assignment< IndicatorNode > solution,
+			final Assignment< IndicatorNode > divSolution,
+			final int time,
+			final SegmentNode segVar,
+			final int curColorId ) {
+
+		final IntervalView< IntType > slice = Views.hyperSlice( imgSolution, 2, time );
+
+		if ( solution.getAssignment( segVar ) == 1 ) {
+			int color = curColorId;
+
+			if ( divSolution.getAssignment( segVar ) != 1 ) {
+				color = color + 2;
+			}
+
+			final IterableRegion< ? > region = segVar.getSegment().getRegion();
+			final int c = color;
+			try {
+				Regions.sample( region, slice ).forEach( t -> t.set( c ) );
+			} catch ( final ArrayIndexOutOfBoundsException aiaob ) {
+				Tr2dLog.log.debug( "sol vis bounds exception" );
+			}
+
+			for ( final MovementHypothesis move : segVar.getOutAssignments().getMoves() ) {
+				if ( solution.getAssignment( move ) == 1 ) {
+					drawLineageWithId( imgSolution, solution, divSolution, time + 1, move.getDest(), curColorId );
+				}
+			}
+			for ( final DivisionHypothesis div : segVar.getOutAssignments().getDivisions() ) {
+				if ( solution.getAssignment( div ) == 1 ) {
+					drawLineageWithId( imgSolution, solution, divSolution, time + 1, div.getDest1(), curColorId );
+					drawLineageWithId( imgSolution, solution, divSolution, time + 1, div.getDest2(), curColorId );
 				}
 			}
 		}

@@ -72,6 +72,11 @@ public class Tr2dTrackingOverlay extends BdvOverlay {
 	private void drawCOMTails( final Graphics2D g, final int cur_t, final int length ) {
 		final Tr2dTrackingProblem tr2dPG = trackingModel.getTrackingProblem();
 		final Assignment< IndicatorNode > pgSolution = trackingModel.getSolution(activeSolution);
+		int nextSolution = 0;
+		if ( trackingModel.getDiverseSolutionBdvSources().size() > 1 ) {
+			nextSolution = ( activeSolution + 1 ) % trackingModel.getDiverseSolutionBdvSources().size();
+		}
+		final Assignment< IndicatorNode > divSolution = trackingModel.getSolution( nextSolution );
 
 		final AffineTransform2D trans = new AffineTransform2D();
 		getCurrentTransform2D( trans );
@@ -80,12 +85,20 @@ public class Tr2dTrackingOverlay extends BdvOverlay {
 			if ( pgSolution.getAssignment( segvar ) == 1 ) {
 				for ( final MovementHypothesis move : segvar.getInAssignments().getMoves() ) {
 					if ( pgSolution.getAssignment( move ) == 1 ) {
-						drawCOMTailSegment( g, trans, cur_t - 1, move.getSrc(), segvar, Color.GREEN, 0, length );
+						if ( divSolution.getAssignment( move ) != 1 ) {
+							drawCOMTailSegment( g, trans, cur_t - 1, move.getSrc(), segvar, Color.MAGENTA, 0, length );
+						} else {
+							drawCOMTailSegment( g, trans, cur_t - 1, move.getSrc(), segvar, Color.GREEN, 0, length );	
+						}
 					}
 				}
 				for ( final DivisionHypothesis div : segvar.getInAssignments().getDivisions() ) {
 					if ( pgSolution.getAssignment( div ) == 1 ) {
-						drawCOMTailSegment( g, trans, cur_t - 1, div.getSrc(), segvar, Color.ORANGE, 0, length );
+						if ( divSolution.getAssignment( div ) != 1 ) {
+							drawCOMTailSegment( g, trans, cur_t - 1, div.getSrc(), segvar, Color.PINK, 0, length );
+						} else {
+							drawCOMTailSegment( g, trans, cur_t - 1, div.getSrc(), segvar, Color.ORANGE, 0, length );
+						}
 					}
 				}
 			}
@@ -116,6 +129,11 @@ public class Tr2dTrackingOverlay extends BdvOverlay {
 		g2.setStroke( new BasicStroke( 3 * ( ( length - i ) / ( ( float ) length ) ) ) );
 
 		final Assignment< IndicatorNode > pgSolution = trackingModel.getSolution(activeSolution);
+		int nextSolution = 0;
+		if ( trackingModel.getDiverseSolutionBdvSources().size() > 1 ) {
+			nextSolution = ( activeSolution + 1 ) % trackingModel.getDiverseSolutionBdvSources().size();
+		}
+		final Assignment< IndicatorNode > divSolution = trackingModel.getSolution( nextSolution );
 
 		final Tr2dSegmentationProblem tp0 = trackingModel.getTrackingProblem().getTimepoints().get( from_t );
 		final Tr2dSegmentationProblem tp1 = trackingModel.getTrackingProblem().getTimepoints().get( from_t + 1 );
@@ -145,12 +163,20 @@ public class Tr2dTrackingOverlay extends BdvOverlay {
 		if ( from_t > 0 && i < length ) {
 			for ( final MovementHypothesis move : from.getInAssignments().getMoves() ) {
 				if ( pgSolution.getAssignment( move ) == 1 ) {
-					drawCOMTailSegment( g, trans, from_t - 1, move.getSrc(), from, Color.GREEN, i + 1, length );
+					if ( divSolution.getAssignment( move ) != 1 ) {
+						drawCOMTailSegment( g, trans, from_t - 1, move.getSrc(), from, Color.MAGENTA, i + 1, length );	
+					} else {
+						drawCOMTailSegment( g, trans, from_t - 1, move.getSrc(), from, Color.GREEN, i + 1, length );
+					}
 				}
 			}
 			for ( final DivisionHypothesis div : from.getInAssignments().getDivisions() ) {
 				if ( pgSolution.getAssignment( div ) == 1 ) {
-					drawCOMTailSegment( g, trans, from_t - 1, div.getSrc(), from, Color.ORANGE, i + 1, length );
+					if ( divSolution.getAssignment( div ) != 1 ) {
+						drawCOMTailSegment( g, trans, from_t - 1, div.getSrc(), from, Color.PINK, i + 1, length );	
+					} else {
+						drawCOMTailSegment( g, trans, from_t - 1, div.getSrc(), from, Color.ORANGE, i + 1, length );
+					}
 				}
 			}
 		}
@@ -163,12 +189,18 @@ public class Tr2dTrackingOverlay extends BdvOverlay {
 		final Color theRegularColor = Color.RED.darker();
 		final Color theForcedColor = Color.RED.brighter();
 		final Color theAvoidedColor = Color.GRAY.brighter().brighter();
+		final Color theDiverseColor = Color.BLUE.brighter();
 
 		final Graphics2D g2 = g;
 		int len = 3;
 
 		final Tr2dTrackingProblem tr2dPG = trackingModel.getTrackingProblem();
 		final Assignment< IndicatorNode > pgSolution = trackingModel.getSolution(activeSolution);
+		int nextSolution = 0;
+		if ( trackingModel.getDiverseSolutionBdvSources().size() > 1 ) {
+			nextSolution = ( activeSolution + 1 ) % trackingModel.getDiverseSolutionBdvSources().size();
+		}
+		final Assignment< IndicatorNode > divSolution = trackingModel.getSolution( nextSolution );
 
 		final AffineTransform2D trans = new AffineTransform2D();
 		getCurrentTransform2D( trans );
@@ -192,6 +224,11 @@ public class Tr2dTrackingOverlay extends BdvOverlay {
 					len = 8;
 					g.drawLine( ( int ) gpos[ 0 ] - len, ( int ) gpos[ 1 ] - len, ( int ) gpos[ 0 ] + len, ( int ) gpos[ 1 ] + len );
 					g.drawLine( ( int ) gpos[ 0 ] - len, ( int ) gpos[ 1 ] + len, ( int ) gpos[ 0 ] + len, ( int ) gpos[ 1 ] - len );
+				} else if ( divSolution.getAssignment( segvar ) != 1 ) {
+					g.setColor( theDiverseColor );
+					g2.setStroke( new BasicStroke( ( float ) 2.0 ) );
+					len = 4;
+					g.drawOval( ( int ) gpos[ 0 ] - len, ( int ) gpos[ 1 ] - len, len * 2, len * 2 );
 				} else {
 					g.setColor( theRegularColor );
 					g2.setStroke( new BasicStroke( ( float ) 2.0 ) );
