@@ -207,6 +207,7 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 		// clear BDV content
 		bdvRemoveAll();
 		bdvRemoveAllOverlays();
+		diverseSolutionBdvSources.clear();
 
 		for ( final ProgressListener progressListener : progressListeners ) {
 			progressListener.hasProgressed( "Purging currently fetched segment hypotheses... (2/3)" );
@@ -243,6 +244,7 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 			buildTrackingProblem();
 			saveTrackingProblem();
 			mfg = null;
+			dmfg = null;
 			return true;
 		} else {
 			return false;
@@ -360,44 +362,13 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 			public void run() {
 				bdvRemoveAllOverlays();
 				bdvRemoveAll();
+				diverseSolutionBdvSources.clear();
 
 				Tr2dTrackingModel.this.run( forceResolve, forceRebuildPG );
 
 				final int bdvTime = bdvHandlePanel.getViewerPanel().getState().getCurrentTimepoint();
 				populateBdv();
 				bdvHandlePanel.getViewerPanel().setTimepoint( bdvTime );
-				
-				if ( numberDiverseSolutions > 1 ) {
-					if ( imgSolutionList != null ) {
-						int i = 0;
-						for ( RandomAccessibleInterval< IntType > imgSol : imgSolutionList ) {
-							if ( i == 0 )
-								bdvAdd( imgSol, "solution 1", 0, 5, new ARGBType( 0x00FFFF ), true );
-							else
-								bdvAdd( imgSol, "solution " + ( i + 1 ), 0, 5, new ARGBType( 0xFFFF00 ), false );
-							i++;
-						}
-						diverseSolutionBdvSources.addAll( bdvGetSources().subList( 1, bdvGetSources().size() ) );
-						
-						if ( trackingOverlay == null ) {
-							trackingOverlay = new Tr2dTrackingOverlay( Tr2dTrackingModel.this );
-							bdvAdd( trackingOverlay, "overlay tracking", true );
-						}
-						trackingOverlay.setActiveSolution(0);
-					}
-				}
-				else {
-					if ( imgSolution != null ) {
-						bdvAdd( imgSolution, "solution", 0, 5, new ARGBType( 0x00FF00 ), true );
-						diverseSolutionBdvSources.addAll( bdvGetSources().subList( 1, bdvGetSources().size() ) );
-						
-						if ( trackingOverlay == null ) {
-							trackingOverlay = new Tr2dTrackingOverlay( Tr2dTrackingModel.this );
-							bdvAdd( trackingOverlay, "overlay tracking", true );
-						}
-						trackingOverlay.setActiveSolution(0);
-					}
-				}
 			}
 
 		};
@@ -409,12 +380,38 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 	public void populateBdv() {
 		bdvRemoveAll();
 		bdvRemoveAllOverlays();
-
-		bdvAdd( getTr2dModel().getRawData(), "RAW" );
-		if ( getImgSolution() != null ) {
-			bdvAdd( getImgSolution(), "solution", 0, 5, new ARGBType( 0x00FF00 ), true );
+		diverseSolutionBdvSources.clear();
+		
+		bdvAdd( getTr2dModel().getRawData(), "RAW", false );
+//		if ( getImgSolution() != null ) {
+//			bdvAdd( getImgSolution(), "solution", 0, 5, new ARGBType( 0x00FF00 ), true );
+//		}
+//		bdvAdd( new Tr2dTrackingOverlay( this ), "overlay_tracking" );
+		
+		if ( numberDiverseSolutions > 1 ) {
+			if ( getImgSolutionList() != null ) {
+				int i = 0;
+				for ( RandomAccessibleInterval< IntType > imgSol : getImgSolutionList() ) {
+					if ( i == 0 )
+						bdvAdd( imgSol, "solution 1", 0, 5, new ARGBType( 0xFFFF00 ), true );
+					else
+						bdvAdd( imgSol, "solution " + ( i + 1 ), 0, 5, new ARGBType( 0x00FFFF ), false );
+					i++;
+				}
+			}
 		}
-		bdvAdd( new Tr2dTrackingOverlay( this ), "overlay_tracking" );
+		else {
+			if ( getImgSolution() != null ) {
+				bdvAdd( getImgSolution(), "solution", 0, 5, new ARGBType( 0x00FF00 ), true );
+			}
+		}
+		diverseSolutionBdvSources.addAll( bdvGetSources().subList( 1, bdvGetSources().size() ) );
+		
+		trackingOverlay = new Tr2dTrackingOverlay( this );
+
+		bdvAdd( trackingOverlay, "overlay tracking" );
+		trackingOverlay.setActiveSolution(0);
+		
 		bdvAdd( new Tr2dFlowOverlay( getTr2dModel().getFlowModel() ), "overlay_flow", false );
 	}
 
@@ -524,6 +521,8 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 			final List< AssignmentMapper< Variable, IndicatorNode > > assMapperList = dmfg.getListOfAssignmentMaps();
 
 			fgSolution = null;
+			pgSolutionList.clear();
+			
 			try {
 				SolveGurobi.GRB_PRESOLVE = 0;
 				solver = new SolveGurobi();
@@ -544,32 +543,10 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 				e.printStackTrace();
 			} catch ( final IllegalStateException ise ) {
 				fgSolution = null;
-	//			pgSolution = null;
+				pgSolution = null;
 				pgSolutionList.clear();
-				try {
-					SolveGurobi.GRB_PRESOLVE = 0;
-					solver = new SolveGurobi();
-					fgSolution = solver.solve( fg, new DefaultLoggingGurobiCallback( Tr2dLog.gurobilog ) );
-					for ( final AssignmentMapper< Variable, IndicatorNode > mapper : assMapperList ) {
-						final Assignment< IndicatorNode > partSol = mapper.map(fgSolution);
-						double partSolutionCost = 0; 
-						for ( final IndicatorNode hypvar : mfg.getVarmap().valuesAs() ) {
-							if ( partSol.getAssignment( hypvar ) == 1 ) {
-								partSolutionCost = partSolutionCost + hypvar.getCost();
-							}
-						}
-						System.out.println( "\n partial solution value: " + partSolutionCost );
-						pgSolutionList.add( partSol );
-					}
-					pgSolution = pgSolutionList.get(0);
-				} catch ( final GRBException e ) {
-					e.printStackTrace();
-				} catch ( final IllegalStateException ise2 ) {
-					fgSolution = null;
-					pgSolution = null;
-					Tr2dLog.log.error( "Model is now infeasible and needs to be retracked!" );
-					fireModelInfeasibleEvent();
-				}
+				Tr2dLog.log.error( "Model is now infeasible and needs to be retracked!" );
+				fireModelInfeasibleEvent();
 			}
 		}
 		else {
@@ -597,6 +574,7 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 			} catch ( final IllegalStateException ise ) {
 				fgSolution = null;
 				pgSolution = null;
+				pgSolutionList.clear();
 				Tr2dLog.log.error( "Model is now infeasible and needs to be retracked!" );
 				fireModelInfeasibleEvent();
 			}
@@ -616,6 +594,10 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 	 */
 	public RandomAccessibleInterval< IntType > getImgSolution() {
 		return imgSolution;
+	}
+
+	public List< RandomAccessibleInterval< IntType > > getImgSolutionList() {
+		return imgSolutionList;
 	}
 
 	/**

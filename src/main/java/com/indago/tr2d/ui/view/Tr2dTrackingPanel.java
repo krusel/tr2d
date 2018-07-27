@@ -60,9 +60,9 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 	
 	private JTextField txtNumberDiverseSolutions;
 	private JButton bPrevSolution;
-	private JLabel lCurrentSolution;
-	private int currentDiverseSolutionIndex;
 	private JButton bNextSolution;
+	private JLabel lCurrentSolution;
+	private int currentDiverseSolutionIndex = 0;
 	
 	private JTextField txtDiverseSegmentCost;
 	private JTextField txtDiverseAppearanceCost;
@@ -77,8 +77,6 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 
 		buildGui();
 		model.populateBdv();
-//todo: model.getDiverseSolutionBdvSources().addAll( model.bdvGetSources().subList( 1, model.bdvGetSources().size() ) );
-
 
 		trackingProgressDialog = null;
 	}
@@ -131,6 +129,8 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 		panelFetch.add( bFetch, "growx, wrap" );
 
 		final JPanel panelGraphConstructionParams = new JPanel( new MigLayout() );
+		panelGraphConstructionParams.setBorder( BorderFactory.createTitledBorder( "graph parameters" ) );
+		
 		txtMaxMovementSearchRadius = new JTextField( 3 );
 		txtMaxMovementSearchRadius.addActionListener( this );
 		txtMaxMovementSearchRadius.addFocusListener( this );
@@ -149,7 +149,6 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 		bRestart = new JButton( "restart" );
 		bRestart.addActionListener( this );
 
-		panelGraphConstructionParams.setBorder( BorderFactory.createTitledBorder( "graph parameters" ) );
 		panelGraphConstructionParams.add( new JLabel( "Max move radius:" ), "growx" );
 		panelGraphConstructionParams.add( txtMaxMovementSearchRadius, "growx, wrap" );
 		panelGraphConstructionParams.add( new JLabel( "Max move assmts:" ), "growx" );
@@ -162,56 +161,60 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 		panelGraphConstructionParams.add( bRestart, "growx, wrap" );
 
 		final JPanel panelDiversityParams = new JPanel( new MigLayout() );
-		txtNumberDiverseSolutions = new JTextField( "" + model.getNumberDiverseSolutions(), 3 );
+		panelDiversityParams.setBorder( BorderFactory.createTitledBorder( "diversity parameters" ) );
+		
+		txtDiverseSegmentCost = new JTextField( 5 );
+		txtDiverseSegmentCost.addActionListener( this );
+		txtDiverseSegmentCost.addFocusListener( this );
+		txtDiverseAppearanceCost = new JTextField( 5 );
+		txtDiverseAppearanceCost.addActionListener( this );
+		txtDiverseAppearanceCost.addFocusListener( this );
+		txtDiverseDisappearanceCost = new JTextField( 5 );
+		txtDiverseDisappearanceCost.addActionListener( this );
+		txtDiverseDisappearanceCost.addFocusListener( this );
+		txtDiverseMovementCost = new JTextField( 5 );
+		txtDiverseMovementCost.addActionListener( this );
+		txtDiverseMovementCost.addFocusListener( this );
+		txtDiverseDivisionCost = new JTextField( 5 );
+		txtDiverseDivisionCost.addActionListener( this );
+		txtDiverseDivisionCost.addFocusListener( this );
+
+		bRestartFG = new JButton( "restart FG only" );
+		bRestartFG.addActionListener( this );
+		
+		panelDiversityParams.add( new JLabel( "Segments:" ), "growx" );
+		panelDiversityParams.add( txtDiverseSegmentCost, "growx, wrap" );
+		panelDiversityParams.add( new JLabel( "Appearance:" ), "growx" );
+		panelDiversityParams.add( txtDiverseAppearanceCost, "growx, wrap" );
+		panelDiversityParams.add( new JLabel( "Disappearance:" ), "growx" );
+		panelDiversityParams.add( txtDiverseDisappearanceCost, "growx, wrap" );
+		panelDiversityParams.add( new JLabel( "Movement:" ), "growx" );
+		panelDiversityParams.add( txtDiverseMovementCost, "growx, wrap" );
+		panelDiversityParams.add( new JLabel( "Divisions:" ), "growx" );
+		panelDiversityParams.add( txtDiverseDivisionCost, "growx, wrap" );
+		panelDiversityParams.add( bRestartFG, "growx, wrap" );
+		
+		final JPanel panelDiversity = new JPanel( new MigLayout() );
+		panelDiversity.setBorder( BorderFactory.createTitledBorder( "diverse solutions" ) );
+		
+		txtNumberDiverseSolutions = new JTextField( 3 );
 		txtNumberDiverseSolutions.addActionListener( this );
 		txtNumberDiverseSolutions.addFocusListener( this );
 		bPrevSolution = new JButton( "<" );
 		bPrevSolution.addActionListener( this );
-		currentDiverseSolutionIndex = 0;
-		lCurrentSolution = new JLabel( "Solution " + ( currentDiverseSolutionIndex + 1 ) + "/1" );
 		bNextSolution = new JButton( ">" );
 		bNextSolution.addActionListener( this );
+		
+		lCurrentSolution = new JLabel( "Solution 1/1" );
 
-		panelDiversityParams.setBorder( BorderFactory.createTitledBorder( "diverse solutions" ) );
-		panelDiversityParams.add( new JLabel( "Number of Solutions:" ), "growx" );
-		panelDiversityParams.add( txtNumberDiverseSolutions, "growx, wrap" );
+		panelDiversity.add( new JLabel( "Number of Solutions:" ), "growx" );
+		panelDiversity.add( txtNumberDiverseSolutions, "growx, wrap" );
+		
 		JPanel panelCycleThroughSolutions = new JPanel();
 		panelCycleThroughSolutions.add( bPrevSolution, "" );
 		panelCycleThroughSolutions.add( lCurrentSolution, "" );
 		panelCycleThroughSolutions.add( bNextSolution, "" );
-		panelDiversityParams.add( panelCycleThroughSolutions, "span, wrap" );
-
-		final JPanel panelDiversityCostParams = new JPanel( new MigLayout() );
-		txtDiverseSegmentCost = new JTextField( "" + model.getDiverseSegmentCost(), 5 );
-		txtDiverseSegmentCost.addActionListener( this );
-		txtDiverseSegmentCost.addFocusListener( this );
-		txtDiverseAppearanceCost = new JTextField( "" + model.getDiverseAppearanceCost(), 5 );
-		txtDiverseAppearanceCost.addActionListener( this );
-		txtDiverseAppearanceCost.addFocusListener( this );
-		txtDiverseDisappearanceCost = new JTextField( "" + model.getDiverseDisappearanceCost(), 5 );
-		txtDiverseDisappearanceCost.addActionListener( this );
-		txtDiverseDisappearanceCost.addFocusListener( this );
-		txtDiverseMovementCost = new JTextField( "" + model.getDiverseMovementCost(), 5 );
-		txtDiverseMovementCost.addActionListener( this );
-		txtDiverseMovementCost.addFocusListener( this );
-		txtDiverseDivisionCost = new JTextField( "" + model.getDiverseDivisionCost(), 5 );
-		txtDiverseDivisionCost.addActionListener( this );
-		txtDiverseDivisionCost.addFocusListener( this );
-		
-		panelDiversityCostParams.setBorder( BorderFactory.createTitledBorder( "diversity parameters" ) );
-		panelDiversityCostParams.add( new JLabel( "Segments:" ), "growx" );
-		panelDiversityCostParams.add( txtDiverseSegmentCost, "growx, wrap" );
-		panelDiversityCostParams.add( new JLabel( "Appearance:" ), "growx" );
-		panelDiversityCostParams.add( txtDiverseAppearanceCost, "growx, wrap" );
-		panelDiversityCostParams.add( new JLabel( "Disappearance:" ), "growx" );
-		panelDiversityCostParams.add( txtDiverseDisappearanceCost, "growx, wrap" );
-		panelDiversityCostParams.add( new JLabel( "Movement:" ), "growx" );
-		panelDiversityCostParams.add( txtDiverseMovementCost, "growx, wrap" );
-		panelDiversityCostParams.add( new JLabel( "Divisions:" ), "growx" );
-		panelDiversityCostParams.add( txtDiverseDivisionCost, "growx, wrap" );
-		
-		bRestartFG = new JButton( "restart FG only" );
-		bRestartFG.addActionListener( this );
+		panelDiversity.add( panelCycleThroughSolutions, "span, wrap" );
 
 		model.bdvSetHandlePanel(
 				new BdvHandlePanel( ( Frame ) this.getTopLevelAncestor(), Bdv
@@ -222,9 +225,8 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 		controls.add( panelFetch, "growx, wrap" );
 		controls.add( panelGraphConstructionParams, "growx, wrap" );
 		controls.add( panelDiversityParams, "growx, wrap" );
-		controls.add( panelDiversityCostParams, "growx, wrap" );
+		controls.add( panelDiversity, "growx, wrap" );
 
-		controls.add( bRestartFG, "growx, wrap" );
 		viewer.add( model.bdvGetHandlePanel().getViewerPanel(), BorderLayout.CENTER );
 
 		final JSplitPane splitPane = new JSplitPane( JSplitPane.HORIZONTAL_SPLIT, controls, viewer );
@@ -322,7 +324,7 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 	 */
 	private void parseAndSetParametersInModel() {
 		try {
-			model.setMaxMovementSearchRadius( Integer.parseInt( txtMaxMovementSearchRadius.getText() ) );
+			model.setMaxMovementSearchRadius( Double.parseDouble( txtMaxMovementSearchRadius.getText() ) );
 		} catch ( final NumberFormatException e ) {
 			txtMaxMovementSearchRadius.setText( "" + model.getMaxMovementSearchRadius() );
 		}
@@ -332,7 +334,7 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 			txtMaxMovementsPerNode.setText( "" + model.getMaxMovementsToAddPerHypothesis() );
 		}
 		try {
-			model.setMaxDivisionSearchRadius( Integer.parseInt( txtMaxDivisionSearchRadius.getText() ) );
+			model.setMaxDivisionSearchRadius( Double.parseDouble( txtMaxDivisionSearchRadius.getText() ) );
 		} catch ( final NumberFormatException e ) {
 			txtMaxDivisionSearchRadius.setText( "" + model.getMaxDivisionSearchRadius() );
 		}
@@ -399,6 +401,7 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 		this.txtMaxMovementsPerNode.setText( "" + model.getMaxMovementsToAddPerHypothesis() );
 		this.txtMaxDivisionSearchRadius.setText( "" + model.getMaxDivisionSearchRadius() );
 		this.txtMaxDivisionsPerNode.setText( "" + model.getMaxDivisionsToAddPerHypothesis() );
+		
 		if ( model.getMaxPixelComponentSize() == Integer.MAX_VALUE ) {
 			this.txtMaxPixelComponentSize.setText( "" );
 		} else {
@@ -411,6 +414,7 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 		this.txtDiverseDisappearanceCost.setText( "" + model.getDiverseDisappearanceCost() );
 		this.txtDiverseMovementCost.setText( "" + model.getDiverseMovementCost() );
 		this.txtDiverseDivisionCost.setText( "" + model.getDiverseDivisionCost() );
+		
 		this.txtNumberDiverseSolutions.setText( "" + model.getNumberDiverseSolutions() );
 	}
 	
@@ -421,10 +425,13 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 		else {
 			index = 0;
 		}
-//		System.out.println( "current index: " + index );
+
 		for( int i = 0; i < model.getDiverseSolutionBdvSources().size(); i++ ) {
-			model.getDiverseSolutionBdvSources().get( i ).setActive( i == index );
-//			System.out.println( model.getDiverseSolutionBdvSources().size() );
+			try {
+				model.getDiverseSolutionBdvSources().get( i ).setActive( i == index );
+			} catch (Exception e) {
+				System.out.println("Exception at diverse solution " + (i+1));
+			}
 		}
 		lCurrentSolution.setText( "Solution " + ( index + 1 ) + "/" + model.getDiverseSolutionBdvSources().size() );
 	}
