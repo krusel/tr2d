@@ -112,25 +112,23 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 		final JPanel panelFetch = new JPanel( new MigLayout() );
 		panelFetch.setBorder( BorderFactory.createTitledBorder( "segmentation fetching" ) );
 
-		txtMaxPixelComponentSize = new JTextField( 3 );
+		txtMaxPixelComponentSize = new JTextField( 5 );
 		txtMaxPixelComponentSize.addActionListener( this );
 		txtMaxPixelComponentSize.addFocusListener( this );
-		txtMinPixelComponentSize = new JTextField( 3 );
+		txtMinPixelComponentSize = new JTextField( 5 );
 		txtMinPixelComponentSize.addActionListener( this );
 		txtMinPixelComponentSize.addFocusListener( this );
 
 		bFetch = new JButton( "fetch" );
 		bFetch.addActionListener( this );
 
-		panelFetch.add( new JLabel( "Max component size:" ), "growx" );
+		panelFetch.add( new JLabel( "Max segment size:" ), "growx" );
 		panelFetch.add( txtMaxPixelComponentSize, "growx, wrap" );
-		panelFetch.add( new JLabel( "Min component size:" ), "growx" );
+		panelFetch.add( new JLabel( "Min segment size:" ), "growx" );
 		panelFetch.add( txtMinPixelComponentSize, "growx, wrap" );
 		panelFetch.add( bFetch, "growx, wrap" );
 
 		final JPanel panelGraphConstructionParams = new JPanel( new MigLayout() );
-		panelGraphConstructionParams.setBorder( BorderFactory.createTitledBorder( "graph parameters" ) );
-		
 		txtMaxMovementSearchRadius = new JTextField( 3 );
 		txtMaxMovementSearchRadius.addActionListener( this );
 		txtMaxMovementSearchRadius.addFocusListener( this );
@@ -149,6 +147,7 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 		bRestart = new JButton( "restart" );
 		bRestart.addActionListener( this );
 
+		panelGraphConstructionParams.setBorder( BorderFactory.createTitledBorder( "graph parameters" ) );
 		panelGraphConstructionParams.add( new JLabel( "Max move radius:" ), "growx" );
 		panelGraphConstructionParams.add( txtMaxMovementSearchRadius, "growx, wrap" );
 		panelGraphConstructionParams.add( new JLabel( "Max move assmts:" ), "growx" );
@@ -293,9 +292,9 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 	 */
 	@Override
 	public void focusLost( final FocusEvent e ) {
-		if ( e.getSource().equals( txtMaxMovementSearchRadius ) || e.getSource().equals( txtMaxMovementsPerNode ) || e.getSource().equals(
-				txtMaxDivisionSearchRadius ) || e.getSource().equals( txtMaxDivisionsPerNode ) || e.getSource().equals(
-						txtMaxPixelComponentSize ) || e.getSource().equals( txtMinPixelComponentSize ) ) {
+		if ( e.getSource().equals( txtMaxMovementSearchRadius ) || e.getSource().equals( txtMaxMovementsPerNode ) || 
+			 e.getSource().equals( txtMaxDivisionSearchRadius ) || e.getSource().equals( txtMaxDivisionsPerNode ) || 
+			 e.getSource().equals( txtMaxPixelComponentSize ) || e.getSource().equals( txtMinPixelComponentSize ) ) {
 			parseAndSetParametersInModel();
 			model.saveStateToFile();
 		}
@@ -324,7 +323,7 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 	 */
 	private void parseAndSetParametersInModel() {
 		try {
-			model.setMaxMovementSearchRadius( Double.parseDouble( txtMaxMovementSearchRadius.getText() ) );
+			model.setMaxMovementSearchRadius( Integer.parseInt( txtMaxMovementSearchRadius.getText() ) );
 		} catch ( final NumberFormatException e ) {
 			txtMaxMovementSearchRadius.setText( "" + model.getMaxMovementSearchRadius() );
 		}
@@ -334,7 +333,7 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 			txtMaxMovementsPerNode.setText( "" + model.getMaxMovementsToAddPerHypothesis() );
 		}
 		try {
-			model.setMaxDivisionSearchRadius( Double.parseDouble( txtMaxDivisionSearchRadius.getText() ) );
+			model.setMaxDivisionSearchRadius( Integer.parseInt( txtMaxDivisionSearchRadius.getText() ) );
 		} catch ( final NumberFormatException e ) {
 			txtMaxDivisionSearchRadius.setText( "" + model.getMaxDivisionSearchRadius() );
 		}
@@ -401,12 +400,7 @@ public class Tr2dTrackingPanel extends JPanel implements ActionListener, FocusLi
 		this.txtMaxMovementsPerNode.setText( "" + model.getMaxMovementsToAddPerHypothesis() );
 		this.txtMaxDivisionSearchRadius.setText( "" + model.getMaxDivisionSearchRadius() );
 		this.txtMaxDivisionsPerNode.setText( "" + model.getMaxDivisionsToAddPerHypothesis() );
-		
-		if ( model.getMaxPixelComponentSize() == Integer.MAX_VALUE ) {
-			this.txtMaxPixelComponentSize.setText( "" );
-		} else {
-			this.txtMaxPixelComponentSize.setText( "" + model.getMaxPixelComponentSize() );
-		}
+		this.txtMaxPixelComponentSize.setText( "" + model.getMaxPixelComponentSize() );
 		this.txtMinPixelComponentSize.setText( "" + model.getMinPixelComponentSize() );
 		
 		this.txtDiverseSegmentCost.setText( "" + model.getDiverseSegmentCost() );
