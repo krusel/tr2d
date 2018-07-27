@@ -47,7 +47,7 @@ import com.indago.tr2d.pg.Tr2dSegmentationProblem;
 import com.indago.tr2d.pg.Tr2dTrackingProblem;
 import com.indago.tr2d.ui.listener.ModelInfeasibleListener;
 import com.indago.tr2d.ui.listener.SolutionChangedListener;
-import com.indago.tr2d.ui.util.SolutionVisulizer;
+import com.indago.tr2d.ui.util.SolutionVisualizer;
 import com.indago.tr2d.ui.view.bdv.overlays.Tr2dFlowOverlay;
 import com.indago.tr2d.ui.view.bdv.overlays.Tr2dTrackingOverlay;
 import com.indago.ui.bdv.BdvWithOverlaysOwner;
@@ -88,7 +88,7 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 	private final String FILENAME_TRACKING = "tracking.tif";
 
 	private final Tr2dModel tr2dModel;
-	private final Tr2dSegmentationCollectionModel tr2dSegModel;
+	private final Tr2dSegmentationEditorModel tr2dSegEditModel;
 
 	private double maxMovementSearchRadius = 50;
 	private double maxDivisionSearchRadius = 50;
@@ -173,7 +173,7 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 		getCostFactories().add( this.moveCosts );
 		getCostFactories().add( this.divisionCosts );
 
-		this.tr2dSegModel = model.getSegmentationModel();
+		this.tr2dSegEditModel = model.getSegmentationEditorModel();
 
 		final File fImgSol = dataFolder.addFile( FILENAME_TRACKING ).getFile();
 		if ( fImgSol.canRead() ) {
@@ -183,7 +183,7 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 		imgs.add( imgSolution );
 
 		// Loading hypotheses labeling frames if exist in project folder
-		this.labelingFrames = new LabelingTimeLapse( tr2dSegModel, this.getMinPixelComponentSize(), this.getMaxPixelComponentSize() );
+		this.labelingFrames = new LabelingTimeLapse( tr2dSegEditModel, this.getMinPixelComponentSize(), this.getMaxPixelComponentSize() );
 		try {
 			hypothesesFolder = dataFolder.addFolder( FOLDER_LABELING_FRAMES );
 			hypothesesFolder.loadFiles();
@@ -243,7 +243,6 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 			buildTrackingProblem();
 			saveTrackingProblem();
 			mfg = null;
-			dmfg = null;
 			return true;
 		} else {
 			return false;
@@ -312,23 +311,23 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 			if ( numberDiverseSolutions > 1 ) {
 				imgSolutionList.clear();
 				for ( Assignment< IndicatorNode > divSolution : pgSolutionList ) {
-					imgSolutionList.add( SolutionVisulizer.drawSolutionSegmentImages( this, divSolution) );
+					imgSolutionList.add( SolutionVisualizer.drawSolutionSegmentImages( this, divSolution) );
 				}
 				if ( numberDiverseSolutions == 2 ) {
 					imgSolutionList.clear();
 					Assignment< IndicatorNode > divSolutionOne = pgSolutionList.get(0);
 					Assignment< IndicatorNode > divSolutionTwo = pgSolutionList.get(1);
-					imgSolutionList.add( SolutionVisulizer.drawSolutionSegmentImages( this, divSolutionOne, divSolutionTwo ) );
-					imgSolutionList.add( SolutionVisulizer.drawSolutionSegmentImages( this, divSolutionTwo, divSolutionOne ) );
+					imgSolutionList.add( SolutionVisualizer.drawSolutionSegmentImages( this, divSolutionOne, divSolutionTwo ) );
+					imgSolutionList.add( SolutionVisualizer.drawSolutionSegmentImages( this, divSolutionTwo, divSolutionOne ) );
 				}
 			} else {
-				imgSolution = SolutionVisulizer.drawSolutionSegmentImages( this, pgSolution );
+				imgSolution = SolutionVisualizer.drawSolutionSegmentImages( this, pgSolution );
 			}
     		saveSolution();
 			fireSolutionChangedEvent();
 			fireProgressEvent();
 		}
-		
+
 		fireProgressCompletedEvent();
 	}
 
@@ -337,6 +336,8 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 	 * Additionally also takes care of the BDV.
 	 *
 	 * @param forceResolve
+	 *            should resolve be forced?
+	 * @return the created thread the run is performed in
 	 */
 	public Thread runInThread( final boolean forceResolve ) {
 		return this.runInThread( forceResolve, false );
@@ -345,9 +346,14 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 	/**
 	 * (Re)runs the trackins problem in a thread of it's own.
 	 * Additionally also takes care of the BDV.
+	 *
+	 * @param forceResolve
+	 *            should resolve be forced?
+	 * @param forceRebuildPG
+	 *            should rebuild of the problem graph be forced?
+	 * @return the created thread the run is performed in
 	 */
 	public Thread runInThread( final boolean forceResolve, final boolean forceRebuildPG ) {
-//		final Tr2dTrackingModel self = this;
 		final Runnable runnable = new Runnable() {
 
 			@Override
@@ -412,9 +418,6 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 		bdvAdd( new Tr2dFlowOverlay( getTr2dModel().getFlowModel() ), "overlay_flow", false );
 	}
 
-	/**
-	 *
-	 */
 	private void saveTrackingProblem() {
 		try {
 			tr2dTraProblem.saveToFile( dataFolder.getFile( FILENAME_PGRAPH ).getFile() );
@@ -425,16 +428,10 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 		}
 	}
 
-	/**
-	 *
-	 */
 	private void saveFactorGraph() {
 		Tr2dLog.log.debug( "Saveing of FGs not yet implemented!" );
 	}
 
-	/**
-	 *
-	 */
 	private void saveSolution() {
 		IJ.save(
 				ImageJFunctions.wrap( imgSolution, "tracking solution" ).duplicate(),
@@ -442,6 +439,8 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 	}
 
 	/**
+	 * @param forceHypothesesRefetch
+	 *            should hypothesis refetch be forced?
 	 * @return returns true if segmentations could be processed, false e.g. if
 	 *         no segmentation was found.
 	 */
@@ -463,9 +462,6 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 		return true;
 	}
 
-	/**
-	 *
-	 */
 	public void buildTrackingProblem() {
 		final TicToc tictoc = new TicToc();
 
@@ -509,9 +505,6 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 		Tr2dLog.log.info( "Tracking graph was built sucessfully!" );
 	}
 
-	/**
-	 *
-	 */
 	public void buildFactorGraph() {
 		final TicToc tictoc = new TicToc();
 		tictoc.tic( "Constructing FactorGraph for created Tr2dTrackingProblem..." );
@@ -525,9 +518,6 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 		}
 	}
 
-	/**
-	 *
-	 */
 	private void solveFactorGraph() {
 		if ( numberDiverseSolutions > 1 ) {
 			final UnaryCostConstraintGraph fg = dmfg.getFg();
@@ -585,7 +575,6 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 		else {
 			final UnaryCostConstraintGraph fg = mfg.getFg();
 			final AssignmentMapper< Variable, IndicatorNode > assMapper = mfg.getAssmntMapper();
-//			final Map< IndicatorNode, Variable > varMapper = mfg.getVarmap();
 
 			fgSolution = null;
 			pgSolutionList.clear();
@@ -679,23 +668,14 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 		return bdvOverlaySources;
 	}
 
-	/**
-	 * @return
-	 */
 	public Tr2dTrackingProblem getTrackingProblem() {
 		return this.tr2dTraProblem;
 	}
 
-	/**
-	 * @return
-	 */
 	public Assignment< IndicatorNode > getSolution() {
 		return getSolution(0);
 	}
 
-	/**
-	 * @return
-	 */
 	public Assignment< IndicatorNode > getSolution(int i) {
 		if ( i < this.pgSolutionList.size() && i >= 0 )
 			return this.pgSolutionList.get(i);
@@ -803,58 +783,36 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 		}
 	}
 
-	/**
-	 * @return the mfg
-	 */
 	public MappedFactorGraph getMappedFactorGraph() {
 		return mfg;
 	}
 
-	/**
-	 * @return the dmfg
-	 */
 	public MappedDiverseFactorGraph getMappedDiverseFactorGraph() {
 		return dmfg;
 	}
 
-	/**
-	 * @param progressListener
-	 */
 	public void addProgressListener( final ProgressListener progressListener ) {
 		this.progressListeners.add( progressListener );
 	}
 
-	/**
-	 * @param maxProgress
-	 */
 	public void setTotalProgressSteps( final int maxProgress ) {
 		for ( final ProgressListener progressListener : this.progressListeners ) {
 			progressListener.setTotalProgressSteps( maxProgress );
 		}
 	}
 
-	/**
-	 *
-	 */
 	public void fireProgressEvent() {
 		for ( final ProgressListener progressListener : this.progressListeners ) {
 			progressListener.hasProgressed();
 		}
 	}
 
-	/**
-	 * @param newMessage
-	 */
 	public void fireProgressEvent( final String newMessage ) {
 		for ( final ProgressListener progressListener : this.progressListeners ) {
 			progressListener.hasProgressed( newMessage );
 		}
 	}
 
-	/**
-	 * @param newMessage
-	 * @param maxProgress
-	 */
 	public void fireNextProgressPhaseEvent( final String newMessage, final int maxProgress ) {
 		for ( final ProgressListener progressListener : this.progressListeners ) {
 			progressListener.resetProgress( newMessage, maxProgress );
@@ -867,9 +825,6 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 		}
 	}
 
-	/**
-	 * @param progress
-	 */
 	public void removeProgressListener( final DialogProgress progress ) {
 		this.progressListeners.remove( progress );
 	}
@@ -1068,9 +1023,6 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 		return trackingOverlay;
 	}
 
-	/**
-	 *
-	 */
 	public void saveStateToFile() {
 		try {
 			final FileWriter writer = new FileWriter( new File( dataFolder.getFolder(), FILENAME_STATE ) );
@@ -1156,9 +1108,6 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 		}
 	}
 
-	/**
-	 * @param costsFile
-	 */
 	public void importCostParametrization( final File costsFile ) throws IOException {
 		final BufferedReader costReader = new BufferedReader( new FileReader( costsFile ) );
 
@@ -1178,10 +1127,6 @@ public class Tr2dTrackingModel implements BdvWithOverlaysOwner {
 		costReader.close();
 	}
 
-	/**
-	 * @param costsFile
-	 * @throws IOException
-	 */
 	public void exportCostParametrization( final File costsFile ) throws IOException {
 		final SimpleDateFormat sdfDate = new SimpleDateFormat( "yyyy-MM-dd HH:mm:ss" );
 		final Date now = new Date();

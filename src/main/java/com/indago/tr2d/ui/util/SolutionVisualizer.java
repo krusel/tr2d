@@ -26,11 +26,8 @@ import net.imglib2.view.Views;
 /**
  * @author jug
  */
-public class SolutionVisulizer {
+public class SolutionVisualizer {
 
-	/**
-	 *
-	 */
 	public static RandomAccessibleInterval< IntType > drawSolutionSegmentImages(
 			final Tr2dTrackingModel trackingModel,
 			final Assignment< IndicatorNode > solution ) {
@@ -80,7 +77,6 @@ public class SolutionVisulizer {
 					for ( final AppearanceHypothesis app : segVar.getInAssignments().getAppearances() ) {
 						if ( solution.getAssignment( app ) == 1 ) { // || time == 0
 							drawLineageWithId( ret, solution, divSolution, time, segVar, curColorId ); // 10 + curColorId
-//							curColorId++;
 						}
 					}
 				}
@@ -91,10 +87,6 @@ public class SolutionVisulizer {
 		return ret;
 	}
 
-	/**
-	 * @param segVar
-	 * @param curColorId
-	 */
 	private static void drawLineageWithId(
 			final RandomAccessibleInterval< IntType > imgSolution,
 			final Assignment< IndicatorNode > solution,
@@ -106,12 +98,6 @@ public class SolutionVisulizer {
 
 		if ( solution.getAssignment( segVar ) == 1 ) {
 			final int color = curColorId;
-
-//			for ( final DisappearanceHypothesis disapp : segVar.getOutAssignments().getDisappearances() ) {
-//				if ( problemSolution.getAssignment( disapp ) == 1 ) {
-//					color = 5;
-//				}
-//			}
 
 			final IterableRegion< ? > region = segVar.getSegment().getRegion();
 			final int c = color;

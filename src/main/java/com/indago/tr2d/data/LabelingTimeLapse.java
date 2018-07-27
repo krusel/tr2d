@@ -22,7 +22,7 @@ import com.indago.data.segmentation.filteredcomponents.FilteredComponentTree.Max
 import com.indago.io.ProjectFile;
 import com.indago.io.ProjectFolder;
 import com.indago.tr2d.Tr2dLog;
-import com.indago.tr2d.ui.model.Tr2dSegmentationCollectionModel;
+import com.indago.tr2d.ui.model.Tr2dSegmentationEditorModel;
 
 import indago.ui.progress.ProgressListener;
 import net.imglib2.Dimensions;
@@ -38,7 +38,7 @@ import weka.gui.ExtensionFileFilter;
  */
 public class LabelingTimeLapse {
 
-	private final Tr2dSegmentationCollectionModel model;
+	private final Tr2dSegmentationEditorModel model;
 
 	// Parameters for FilteredComponentTrees
 	private int minHypothesisSize;
@@ -55,7 +55,7 @@ public class LabelingTimeLapse {
 	 *
 	 * @param model
 	 */
-	public LabelingTimeLapse( final Tr2dSegmentationCollectionModel model, final int minHypothesisSize, final int maxHypothesisSize ) {
+	public LabelingTimeLapse( final Tr2dSegmentationEditorModel model, final int minHypothesisSize, final int maxHypothesisSize ) {
 		this.model = model;
 
 		// this should be a parameter
@@ -68,13 +68,18 @@ public class LabelingTimeLapse {
 	}
 
 	/**
+	 * @param progressListeners
+	 *            Progress listener
 	 * @return <code>true</code>, if any sum images for processing where found,
 	 *         <code>false</code> otherwise
 	 */
 	public boolean processFrames( final List< ProgressListener > progressListeners ) {
 		try {
-			if ( getSegmentHypothesesImages().size() == 0 ) { return false; }
-			final RandomAccessibleInterval< IntType > firstSumImg = getSegmentHypothesesImages().get( 0 );
+			final List< RandomAccessibleInterval< IntType > >
+					segmentHypothesesImages = getSegmentHypothesesImages();
+			if ( segmentHypothesesImages.size() == 0 ) { return false; }
+			final RandomAccessibleInterval< IntType > firstSumImg = segmentHypothesesImages
+					.get( 0 );
 
 			for ( final ProgressListener progressListener : progressListeners ) {
 				progressListener.resetProgress( "Computing segment hypotheses labelings...", ( int ) firstSumImg.dimension( 2 ) );
@@ -88,7 +93,7 @@ public class LabelingTimeLapse {
 				final LabelingBuilder labelingBuilder = new LabelingBuilder( d );
 				frameLabelingBuilders.add( labelingBuilder );
 
-				for ( final RandomAccessibleInterval< IntType > sumimg : getSegmentHypothesesImages() ) {
+				for ( final RandomAccessibleInterval< IntType > sumimg : segmentHypothesesImages) {
 					// hyperslize desired frame
 					IntervalView< IntType > frame = null;
 					final long[] offset = new long[ sumimg.numDimensions() ];
@@ -125,26 +130,15 @@ public class LabelingTimeLapse {
 		return processedOrLoaded;
 	}
 
-	/**
-	 * @return
-	 * @throws IllegalAccessException
-	 */
 	public List< RandomAccessibleInterval< IntType > > getSegmentHypothesesImages()
 			throws IllegalAccessException {
 		return model.getSumImages();
 	}
 
-	/**
-	 * @return
-	 */
 	public int getNumFrames() {
 		return frameLabelingBuilders.size();
 	}
 
-	/**
-	 * @param frameId
-	 * @return
-	 */
 	public List< LabelingSegment > getLabelingSegmentsForFrame( final int frameId ) {
 		return frameLabelingBuilders.get( frameId ).getSegments();
 	}
@@ -153,6 +147,7 @@ public class LabelingTimeLapse {
 	 * Returns the <code>LabelingPlus</code> for the requested frame.
 	 *
 	 * @param frameId
+	 *            integer pointing out the frame id
 	 * @return the <code>LabelingPlus</code> requested, or <code>null</code> if
 	 *         it does not exists.
 	 */
@@ -163,10 +158,6 @@ public class LabelingTimeLapse {
 			return null;
 	}
 
-	/**
-	 * @param frameId
-	 * @return
-	 */
 	public ConflictGraph< LabelingSegment > getConflictGraph( final int frameId ) {
 		final LabelingBuilder key = frameLabelingBuilders.get( frameId );
 		if ( !mapToConflictGraphs.containsKey( key ) ) {
@@ -175,9 +166,6 @@ public class LabelingTimeLapse {
 		return mapToConflictGraphs.get( key );
 	}
 
-	/**
-	 *
-	 */
 	public void loadFromProjectFolder( final ProjectFolder folder ) {
 		frameLabelingBuilders.clear();
 		processedOrLoaded = false;
@@ -196,15 +184,13 @@ public class LabelingTimeLapse {
 		}
 	}
 
-	/**
-	 * @return
-	 */
 	public boolean needProcessing() {
 		return !processedOrLoaded;
 	}
 
 	/**
 	 * @param folder
+	 *            ProjectFolder instance
 	 * @param progressListeners
 	 *            please do not hand <code>null</code>. Empty lists are fine
 	 *            though.
@@ -233,16 +219,10 @@ public class LabelingTimeLapse {
 		}
 	}
 
-	/**
-	 * @param minPixelComponentSize
-	 */
 	public void setMinSegmentSize( final int minHypothesisSize ) {
 		this.minHypothesisSize = minHypothesisSize;
 	}
 
-	/**
-	 * @param maxPixelComponentSize
-	 */
 	public void setMaxSegmentSize( final int maxHypothesisSize ) {
 		this.maxHypothesisSize = maxHypothesisSize;
 	}

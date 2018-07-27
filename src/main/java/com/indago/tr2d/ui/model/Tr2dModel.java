@@ -36,6 +36,7 @@ public class Tr2dModel {
 	private final ProjectFolder projectFolder;
 
 	private final Tr2dSegmentationCollectionModel segModel;
+	private final Tr2dSegmentationEditorModel segEditModel;
 	private final Tr2dFlowModel flowModel;
 	private final Tr2dTrackingModel trackingModel;
 
@@ -44,11 +45,6 @@ public class Tr2dModel {
 	 */
 	private Tr2dMainPanel mainUiPanel;
 
-	/**
-	 *
-	 * @param projectFolder
-	 * @param imgPlus
-	 */
 	public Tr2dModel( final ProjectFolder projectFolder, final ImagePlus imgPlus ) {
 		this.imgPlus = imgPlus;
 		this.projectFolder = projectFolder;
@@ -58,6 +54,7 @@ public class Tr2dModel {
 		ImglibUtil.computeMinMax( Views.iterable( imgRaw ), min, max );
 
 		segModel = new Tr2dSegmentationCollectionModel( this );
+		segEditModel = new Tr2dSegmentationEditorModel( this );
 		flowModel = new Tr2dFlowModel( this );
 		trackingModel =
 				new Tr2dTrackingModel( this, new HernanSegmentCostFactory( imgRaw ), new HernanAppearanceCostFactory( imgRaw ), new HernanMovementCostFactory( imgRaw ), new HernanDivisionCostFactory( imgRaw ), new HernanDisappearanceCostFactory( imgRaw ) );
@@ -65,8 +62,9 @@ public class Tr2dModel {
 
 	/**
 	 * Sets the ref to the main UI panel of Tr2d.
-	 *
+	 * 
 	 * @param mainPanel
+	 *            Tr2dMainPanl
 	 */
 	public void setRefToMainPanel( final Tr2dMainPanel mainPanel ) {
 		this.mainUiPanel = mainPanel;
@@ -101,16 +99,10 @@ public class Tr2dModel {
 		return projectFolder;
 	}
 
-	/**
-	 * @return
-	 */
 	public double getMaxRawValue() {
 		return max.getRealDouble();
 	}
 
-	/**
-	 * @return
-	 */
 	public double getMinRawValue() {
 		return min.getRealDouble();
 	}
@@ -120,6 +112,10 @@ public class Tr2dModel {
 	 */
 	public Tr2dSegmentationCollectionModel getSegmentationModel() {
 		return segModel;
+	}
+
+	public Tr2dSegmentationEditorModel getSegmentationEditorModel() {
+		return segEditModel;
 	}
 
 	/**
@@ -136,9 +132,6 @@ public class Tr2dModel {
 		return trackingModel;
 	}
 
-	/**
-	 * @param conf
-	 */
 	public void setDefaultInputTriggerConfig( final InputTriggerConfig conf ) {
 		this.inputTriggerConfig = conf;
 	}
@@ -146,17 +139,12 @@ public class Tr2dModel {
 	/**
 	 * @return the set <code>InputTriggerConfig</code>, or <code>null</code> if
 	 *         none was set.
-	 * @return
 	 */
 	public InputTriggerConfig getDefaultInputTriggerConfig() {
 		return this.inputTriggerConfig;
 	}
 
-	/**
-	 * @return
-	 */
 	public Tr2dMainPanel getMainPanel() {
 		return this.mainUiPanel;
 	}
-
 }
